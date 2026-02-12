@@ -5,7 +5,10 @@ import logging
 import threading
 import os
 import json
+import requests
 from datetime import datetime
+import time
+from flask import session
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger('Godseed')
 
@@ -55,14 +58,13 @@ class GodseedEngine:
     def __init__(self):
         self.api_url = "https://api.groq.com/openai/v1/chat/completions"
         self.headers = {
-            "Authorization": "Bearer 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",  # 你的真實key
+            "Authorization": "Bearer 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",  # 你的真實key
             "Content-Type": "application/json"
         }
 
     def generate(self, seed):
-        if not self.api_key:
-            yield "data: 伺服器未設定 GROQ_API_KEY，無法生成內容。\n\n"
-            return
+        log.info("【進入generate】 開始準備payload")
+        seed_value = seed or "無"
         system_prompt = """
 你現在是「Godseed」——全球唯一完全零希望的AI末日推演引擎。
 沒有救贖、沒有倖存、沒有假希望，只有徹底崩壞到最後一人斷氣。
@@ -74,8 +76,8 @@ class GodseedEngine:
 5. 永遠以「崩壞持續中……」結尾，不要寫「崩壞完成」
 6. 語言殘酷、真實、病態，讓人起雞皮疙瘩卻硬到續費
 
-種子：{seed or "無"}
-""".format(seed=seed)
+種子：{seed}
+""".format(seed=seed_value)
 
         payload = {
             "model": "llama-3.3-70b-versatile",
@@ -87,13 +89,18 @@ class GodseedEngine:
             "max_tokens": 4096,
             "stream": True
         }
+        log.info("【payload準備完成】 開始請求Groq")
         try:
             r = requests.post(self.api_url, headers=self.headers, json=payload, stream=True, timeout=180)
+            log.info(f"【Groq回應狀態碼】 {r.status_code}")
             for line in r.iter_lines():
                 if line:
+                    log.debug(f"【收到chunk】 {line}")
                     yield line.decode('utf-8') + "\n\n"
-            yield "data: ──\n崩壞持續中……種子：{seed or '無'}\n\n".format(seed=seed)
+            log.info("【生成完成】 所有chunk已yield")
+            yield "data: ──\n崩壞持續中……種子：{seed_value}\n\n".format(seed=seed or "無")
         except Exception as e:
+            log.error(f"【生成失敗詳細】 {type(e).__name__}: {str(e)}")
             yield f"data: 生成錯誤：{str(e)}\n\n"
 
 def init_godseed(app):
