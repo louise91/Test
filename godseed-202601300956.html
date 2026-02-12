@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Godseed</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:#000; color:#0f0; font-family:'Courier New', monospace; min-height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+    
+    /* 經典綠色基調 + 血紅輻射粒子 */
+    #town { height:45vh; background:#000; position:relative; overflow:hidden; }
+.agent { 
+  position:absolute; 
+  width:8px; height:8px; 
+  background:#f00; 
+  border-radius:50%; 
+  opacity:0.8; 
+  box-shadow:0 0 30px #f00, 0 0 60px #f00; /* 發光到爆炸 */
+  animation:bleed 15s infinite linear;
+}
+    @keyframes bleed { 
+  0% { transform:translate(0,0) scale(1); opacity:0.8; }
+  100% { transform:translate(100vw,100vh) scale(5); opacity:0; } /* 變大5倍才消失 */
+}
+    
+    #controls { padding:25px; background:#000; }
+    #seed { width:100%; padding:20px; font-size:19px; background:#000; color:#0f0; border:2px solid #0f0; border-radius:8px; margin-bottom:20px; }
+    #seed:focus { outline:none; border-color:#0f0; box-shadow:0 0 25px rgba(0,255,0,0.4); }
+    
+    button { width:100%; padding:22px; font-size:26px; background:#000; color:#0f0; border:2px solid #0f0; border-radius:8px; cursor:pointer; font-weight:bold; }
+    button:hover { background:#0f0; color:#000; box-shadow:0 0 40px rgba(0,255,0,0.7); }
+    
+    #log { 
+      flex:1; overflow-y:auto; padding:25px; background:#000; font-size:17px; line-height:1.9; white-space:pre-wrap; color:#0f0; 
+      max-height:55vh; border-top:2px solid #0f0; scrollbar-width: thin; scrollbar-color: #0f0 #000;
+    }
+    
+    /* 極致付費牆 - 手機完美版 */
+    #paywall { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.99); z-index:9999; overflow-y:auto; }
+    #paywall.show { display:block; }
+    #paywall-content { background:#000; border:3px solid #0f0; padding:30px 20px; max-width:620px; margin:20px auto; border-radius:15px; box-shadow:0 0 80px rgba(0,255,0,0.3); }
+    #paywall h2 { color:#0f0; font-size:42px; margin-bottom:25px; text-shadow:0 0 25px #0f0; text-align:center; }
+    .price-main { font-size:68px; color:#0f0; font-weight:bold; margin:35px 0; text-shadow:0 0 30px #0f0; text-align:center; }
+    .trial { font-size:26px; color:#0f0; margin:15px 0; text-align:center; }
+    .features { text-align:left; color:#0f0; font-size:17px; line-height:2.2; margin:40px 0; opacity:0.9; }
+    #unlock-btn { background:#000; color:#0f0; padding:25px 50px; font-size:32px; border:3px solid #0f0; border-radius:50px; cursor:pointer; transition:0.4s; display:block; margin:30px auto; }
+    #unlock-btn:hover { background:#0f0; color:#000; transform:scale(1.05); }
+  </style>
+  <!-- html2canvas CDN（如果 <head> 還沒加） -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+  <div id="town"></div>
+  
+  <div id="controls">
+    <input id="seed" placeholder="輸入你的種子，讓一切崩壞">
+    <button onclick="start()">🔥 引爆崩壞</button>
+  </div>
+  
+  <pre id="log">崩壞開始……</pre>
+
+  <!-- 銀行轉帳59元 + 79元信用卡 + 零希望付費牆（手機完美版） -->
+  <div id="paywall">
+    <div id="paywall-content">
+  <h2>崩壞進行中</h2>
+  <p style="color:#0f0; line-height:2.2; font-size:22px; text-align:center;">
+    你已經無法阻止<br>
+    沒有救贖<br>
+    沒有倖存<br>
+    只有終結
+  </p>
+
+  <!-- 銀行轉帳專區（放大 + 強調 + email 欄） -->
+  <div style="margin:30px 0; padding:40px; background:rgba(0,50,0,0.7); border:4px solid #0f0; border-radius:15px;">
+    <p style="color:#f00; font-size:42px; text-align:center; font-weight:bold;">銀行轉帳專屬狂省價 - <strong>省 20 元！</strong>
+你敢用 59 元親手毀滅世界嗎？</p>
+    <p style="color:#0f0; font-size:56px; font-weight:bold; text-align:center;">NT$59 試用3天</p>
+    <p style="color:#fff; font-size:30px; text-align:center; margin:20px 0;">
+      信用卡被抽 2.8% 手續費<br>
+      <strong style="color:#f00;">我們直接讓 20 元給你！</strong>
+    </p>
+    <div style="background:#000; padding:30px; border:2px solid #f00; font-size:28px; color:#0f0; text-align:center; border-radius:10px;">
+      銀行：台新銀行（812）<br>
+      帳號：你的真實帳號<br>
+      戶名：你的真實姓名
+    </div>
+    <p style="color:#aaa; font-size:20px; text-align:center; margin:30px 0;">
+      轉帳後填寫 email 並截圖傳給我們 <br>
+      我們 5 分鐘內開通你的 3 天權限
+    </p>
+
+    <!-- email 輸入欄 + 提交 -->
+    <p style="color:#aaa; font-size:20px; text-align:center; margin:30px 0;">
+    轉帳前填寫 email，我們會記錄並開通
+  </p>
+    <form action="/bank59" method="POST">
+      <input type="email" name="email" placeholder="你的 email（必填）" required style="width:100%; padding:15px; font-size:22px; background:#000; color:#0f0; border:2px solid #0f0; margin-bottom:20px;">
+      <button type="submit" style="padding:15px 40px; background:#000; color:#0f0; border:3px solid #0f0; font-size:24px; border-radius:10px; cursor:pointer;">
+        提交 email 並轉帳
+      </button>
+    </form>
+
+
+    <p style="color:#f00; font-size:26px; text-align:center; margin-top:30px; font-weight:bold;">
+    Mio 已哭到斷氣……59元見證她的終結
+  </p>
+    <p style="color:#aaa; font-size:18px; text-align:center; margin-top:20px;">
+      個人小額測試專案，由我運作<br>
+      59 元試用 3 天，無隱藏扣款、無自動續費
+    </p>
+  </div>
+
+  <!-- 信用卡選項（稍調小） -->
+  <div style="margin-top:50px; text-align:center;">
+    <div class="price-main">NT$79</div>
+    <div class="trial">試用3天 • 無限生成</div>
+    <p style="color:#0f0; text-align:center;">第4天自動續費 NT$399/月（可隨時取消）</p>
+
+    <div class="features">
+      • 完整5000字崩壞劇本<br>
+      • 精確到秒的全球死亡倒數<br>
+      • 崩壞前最後的絕望證言<br>
+      • 永久保存你的崩壞紀錄<br>
+      • 黑暗排行榜永遠留名
+    </div>
+
+    <form action="https://ccore.newebpay.com/MPG/mpg_gateway" method="post">
+      <input type="hidden" name="Amt" value="79">
+      <input type="hidden" name="ItemDesc" value="Godseed 3天試用權限">
+      <input type="hidden" name="PeriodAmt" value="399">
+      <input type="hidden" name="PeriodType" value="M">
+      <button type="submit" id="unlock-btn">🔥 NT$79 立即見證完整崩壞</button>
+    </form>
+  </div>
+
+  <button onclick="closePaywall()" style="margin-top:50px; background:transparent; border:none; color:#444; font-size:14px;">關閉</button>
+</div>
+  </div>
+  
+
+<script>
+  function showShareModal() {
+    document.getElementById('shareModal').style.display = 'flex';
+  }
+
+  function closeShare() {
+    document.getElementById('shareModal').style.display = 'none';
+  }
+
+  function downloadShare() {
+    const content = document.getElementById('shareContent');
+    html2canvas(content, {scale: 2}).then(canvas => {
+      const link = document.createElement('a');
+      link.download = 'my_godseed_collapse.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    });
+  }
+
+  function copyShareText() {
+    const text = `我的崩壞指數：920萬分！死亡人數：78億\n種子：你的種子\n想看你的崩壞？59元試用完整版：https://你的網址`;
+    navigator.clipboard.writeText(text).then(() => alert('已複製！快分享吧'));
+  }
+</script>
+  <script>
+    // 500個血紅粒子
+    for(let i=0; i<500; i++){
+      let a = document.createElement('div');
+      a.className='agent';
+      a.style.left = Math.random()*100 + '%';
+      a.style.top = Math.random()*100 + '%';
+      a.style.animationDelay = Math.random()*20 + 's';
+      a.style.animationDuration = (15 + Math.random()*25) + 's';
+      document.getElementById('town').appendChild(a);
+    }
+
+    let charCount = 0;
+    const LIMIT = 1200;
+
+    async function start() {
+      const seed = document.getElementById('seed').value.trim() || "無";
+      const log = document.getElementById('log');
+      log.textContent = "崩壞開始……\n\n";
+      charCount = 0;
+
+      await fetch('/godseed/start', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({seed})});
+
+      const es = new EventSource('/godseed/stream');
+      es.onmessage = function(e) {
+        if (e.data.includes("[DONE]")) {
+          log.textContent += "\n\n崩壞完成。";
+          es.close();
+          return;
+        }
+        try {
+          const data = JSON.parse(e.data);
+          const content = data.choices?.[0]?.delta?.content || "";
+          if (content) {
+            charCount += content.length;
+            if (charCount < LIMIT) {
+              log.textContent += content;
+            } else if (charCount < LIMIT + 300) {
+              log.textContent += "\n\n[崩壞已不可逆]\n\n你真的準備好見證完整終結嗎？";
+              showPaywall();
+              es.close();
+            }
+            log.scrollTop = log.scrollHeight;
+          }
+        } catch {}
+      };
+    }
+
+    function showPaywall() { document.getElementById('paywall').classList.add('show'); }
+    function closePaywall() { document.getElementById('paywall').classList.remove('show'); }
+  </script>
+</body>
+</html>
