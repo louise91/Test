@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>世界地圖 — AI 小鎮</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--panel:#161b22;--border:#21262d;
+  --text:#e6edf3;--dim:#8b949e;--accent:#58a6ff;
+  --green:#3fb950;--orange:#d29922;--red:#f85149;--purple:#bc8cff;
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;
+  display:flex;height:100dvh;overflow:hidden;}
+
+/* ── 左側地圖區 ── */
+#world-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+#world-header{padding:12px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:12px;background:var(--panel);}
+#world-name{font-size:1.1rem;font-weight:700;color:var(--accent);}
+#world-meta{font-size:.8rem;color:var(--dim);}
+#world-date{font-size:.78rem;color:var(--orange);margin-left:auto;}
+#refresh-btn{background:none;border:1px solid var(--border);color:var(--dim);
+  padding:4px 10px;border-radius:6px;cursor:pointer;font-size:.78rem;}
+#refresh-btn:hover{border-color:var(--accent);color:var(--accent);}
+#world-canvas{flex:1;position:relative;overflow:hidden;background:
+  radial-gradient(ellipse at 20% 80%, #0d1a0d 0%, transparent 50%),
+  radial-gradient(ellipse at 80% 20%, #0d0d1a 0%, transparent 50%),
+  #0d1117;}
+
+/* ── 房間 ── */
+.room{position:absolute;border:1px solid;border-radius:12px;
+  padding:10px 12px;transition:box-shadow .3s;}
+.room-label{font-size:.7rem;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;opacity:.7;margin-bottom:6px;}
+.room-icon{font-size:1.4rem;position:absolute;top:8px;right:10px;opacity:.4;}
+.room.active{box-shadow:0 0 20px currentColor;}
+
+/* 房間顏色主題 */
+.room.office   {border-color:#2d4a7a;background:rgba(30,58,120,.18);color:#7aa8e0;}
+.room.meeting  {border-color:#5a3a7a;background:rgba(90,58,120,.18);color:#c07ae0;}
+.room.lounge   {border-color:#2a5a2a;background:rgba(42,90,42,.18);color:#7ae07a;}
+.room.lobby    {border-color:#5a4a2a;background:rgba(90,74,42,.18);color:#e0b87a;}
+.room.server   {border-color:#1a4a4a;background:rgba(26,74,74,.18);color:#7ae0e0;}
+.room.outdoor  {border-color:#3a5a2a;background:rgba(58,90,42,.15);color:#a0e07a;}
+.room.ceo      {border-color:#7a2a2a;background:rgba(120,42,42,.18);color:#e07a7a;}
+
+/* ── 角色頭像 ── */
+.char-node{position:absolute;display:flex;flex-direction:column;align-items:center;
+  gap:3px;cursor:pointer;transition:transform .5s cubic-bezier(.34,1.56,.64,1);
+  z-index:10;user-select:none;}
+.char-node:hover{transform:scale(1.15) !important;}
+.char-avatar{width:44px;height:44px;border-radius:50%;display:flex;
+  align-items:center;justify-content:center;font-size:1.1rem;font-weight:700;
+  border:2px solid;position:relative;transition:border-color .4s;}
+.char-avatar::after{content:attr(data-emotion);position:absolute;top:-10px;right:-8px;
+  font-size:.9rem;line-height:1;}
+.char-name{font-size:.68rem;font-weight:600;color:var(--text);
+  background:rgba(13,17,23,.8);padding:1px 5px;border-radius:4px;white-space:nowrap;}
+.char-task{font-size:.6rem;color:var(--dim);max-width:80px;text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* 角色顏色 */
+.char-c0 .char-avatar{background:#1a3a5a;border-color:#58a6ff;color:#58a6ff;}
+.char-c1 .char-avatar{background:#3a1a5a;border-color:#bc8cff;color:#bc8cff;}
+.char-c2 .char-avatar{background:#3a2a1a;border-color:#d29922;color:#d29922;}
+.char-c3 .char-avatar{background:#1a3a1a;border-color:#3fb950;color:#3fb950;}
+.char-c4 .char-avatar{background:#3a1a1a;border-color:#f85149;color:#f85149;}
+
+/* 說話泡泡 */
+.speech-bubble{position:absolute;background:rgba(22,27,34,.95);
+  border:1px solid var(--border);border-radius:10px;padding:7px 10px;
+  font-size:.72rem;color:var(--text);max-width:160px;line-height:1.5;
+  pointer-events:none;z-index:20;opacity:0;transition:opacity .3s;
+  white-space:normal;word-break:break-all;}
+.speech-bubble::before{content:"";position:absolute;bottom:-7px;left:16px;
+  border:7px solid transparent;border-top:7px solid var(--border);}
+.speech-bubble.show{opacity:1;}
+
+/* ── 右側資訊欄 ── */
+#sidebar{width:260px;border-left:1px solid var(--border);
+  background:var(--panel);display:flex;flex-direction:column;overflow:hidden;}
+#sidebar-tabs{display:flex;border-bottom:1px solid var(--border);}
+.stab{flex:1;padding:9px 0;text-align:center;font-size:.78rem;cursor:pointer;
+  color:var(--dim);border-bottom:2px solid transparent;transition:.2s;}
+.stab.active{color:var(--accent);border-bottom-color:var(--accent);}
+#sidebar-content{flex:1;overflow-y:auto;padding:12px;}
+
+/* 角色詳情卡 */
+.char-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:12px;margin-bottom:10px;cursor:pointer;transition:.2s;}
+.char-card:hover,.char-card.active{border-color:var(--accent);}
+.char-card-header{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.char-card-av{width:36px;height:36px;border-radius:50%;display:flex;
+  align-items:center;justify-content:center;font-size:.9rem;font-weight:700;}
+.char-card-info{flex:1;}
+.char-card-name{font-size:.9rem;font-weight:700;}
+.char-card-role{font-size:.72rem;color:var(--dim);}
+.char-detail-row{display:flex;gap:6px;margin-bottom:5px;font-size:.75rem;}
+.char-detail-label{color:var(--dim);min-width:48px;}
+.char-detail-val{color:var(--text);flex:1;}
+.emotion-badge{display:inline-block;padding:1px 7px;border-radius:8px;
+  font-size:.68rem;font-weight:600;}
+
+/* 事件串流 */
+.evt-item{border-left:3px solid var(--border);padding:6px 10px;margin-bottom:8px;
+  font-size:.76rem;line-height:1.5;}
+.evt-item.danger{border-color:var(--red);}
+.evt-item.meeting{border-color:var(--purple);}
+.evt-item.milestone{border-color:var(--green);}
+.evt-item.general{border-color:var(--accent);}
+.evt-date{font-size:.67rem;color:var(--dim);margin-bottom:2px;}
+.evt-title{font-weight:600;color:var(--text);}
+.evt-desc{color:var(--dim);margin-top:2px;}
+
+/* 狀態列 */
+#status-bar{padding:6px 16px;border-top:1px solid var(--border);
+  font-size:.7rem;color:var(--dim);display:flex;gap:12px;background:var(--panel);}
+.pulse{display:inline-block;width:7px;height:7px;border-radius:50%;
+  background:var(--green);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* 動作指示器 */
+.action-indicator{position:absolute;width:6px;height:6px;border-radius:50%;
+  background:var(--accent);animation:orbit 3s linear infinite;z-index:15;}
+
+/* 關係連線 Canvas */
+#rel-canvas{position:absolute;inset:0;pointer-events:none;z-index:5;}
+
+/* 角色行動浮層 */
+#action-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  background:rgba(22,27,34,.97);border:1px solid var(--accent);border-radius:10px;
+  padding:10px 18px;font-size:.82rem;color:var(--text);z-index:100;
+  display:none;max-width:340px;text-align:center;animation:slidein .3s ease;}
+@keyframes slidein{from{transform:translateX(-50%) translateY(20px);opacity:0}
+  to{transform:translateX(-50%) translateY(0);opacity:1}}
+
+/* 縮放控制 */
+#zoom-ctrl{position:absolute;bottom:16px;right:16px;display:flex;flex-direction:column;gap:4px;z-index:20;}
+.zoom-btn{width:30px;height:30px;background:var(--panel);border:1px solid var(--border);
+  color:var(--text);border-radius:6px;cursor:pointer;font-size:1rem;
+  display:flex;align-items:center;justify-content:center;}
+.zoom-btn:hover{border-color:var(--accent);}
+
+/* 地圖容器（可縮放） */
+#map-inner{position:absolute;inset:0;transform-origin:center center;transition:transform .2s;}
+</style>
+</head>
+<body>
+
+<div id="world-wrap">
+  <div id="world-header">
+    <span id="world-name">載入中…</span>
+    <span id="world-meta"></span>
+    <span id="world-date"></span>
+    <button id="refresh-btn" onclick="loadWorld()">↻ 更新</button>
+    <button id="refresh-btn" onclick="window.location.href='/ai/world/rpg'" style="margin-left:6px">🗺 RPG地圖</button>
+    <button id="refresh-btn" onclick="window.location.href='/ai'" style="margin-left:6px">💬 聊天室</button>
+  </div>
+  <div id="world-canvas">
+    <canvas id="rel-canvas"></canvas>
+    <div id="map-inner" id="map-inner">
+      <!-- 房間由 JS 動態建立 -->
+    </div>
+    <div id="zoom-ctrl">
+      <button class="zoom-btn" onclick="zoom(1.15)">＋</button>
+      <button class="zoom-btn" onclick="zoom(0.88)">－</button>
+      <button class="zoom-btn" onclick="resetZoom()">⤢</button>
+    </div>
+  </div>
+  <div id="status-bar">
+    <span><span class="pulse"></span> 即時狀態</span>
+    <span id="char-count"></span>
+    <span id="last-update"></span>
+    <span style="margin-left:auto;cursor:pointer;color:var(--accent)" onclick="toggleRelations()">🔗 關係線</span>
+  </div>
+</div>
+
+<div id="sidebar">
+  <div id="sidebar-tabs">
+    <div class="stab active" onclick="setTab('chars')">👤 角色</div>
+    <div class="stab" onclick="setTab('events')">📌 事件</div>
+    <div class="stab" onclick="setTab('world')">🌐 世界</div>
+  </div>
+  <div id="sidebar-content"></div>
+</div>
+
+<div id="action-toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// 地圖房間定義
+// ══════════════════════════════════════════════════════════════
+const ROOMS = [
+  { id:"office",   label:"辦公區",   icon:"💻", cls:"office",  x:5,   y:10,  w:34, h:36 },
+  { id:"meeting",  label:"會議室",   icon:"🗣", cls:"meeting", x:42,  y:10,  w:28, h:22 },
+  { id:"lounge",   label:"休息區",   icon:"☕", cls:"lounge",  x:42,  y:36,  w:20, h:20 },
+  { id:"lobby",    label:"大廳",     icon:"🏢", cls:"lobby",   x:5,   y:50,  w:22, h:18 },
+  { id:"server",   label:"機房",     icon:"🖥", cls:"server",  x:73,  y:10,  w:22, h:22 },
+  { id:"ceo",      label:"執行長辦公室",icon:"👔",cls:"ceo",   x:73,  y:36,  w:22, h:20 },
+  { id:"outdoor",  label:"戶外",     icon:"🌿", cls:"outdoor", x:5,   y:72,  w:88, h:16 },
+];
+
+// 位置名稱 → 房間 ID 的對應
+const LOC_MAP = {
+  "辦公室":"office","辦公區":"office","工作區":"office",
+  "會議室":"meeting","會議區":"meeting",
+  "休息區":"lounge","茶水間":"lounge","休息室":"lounge",
+  "大廳":"lobby","入口":"lobby","玄關":"lobby",
+  "機房":"server","伺服器室":"server",
+  "執行長辦公室":"ceo","老闆辦公室":"ceo","董事長室":"ceo",
+  "戶外":"outdoor","戶外空間":"outdoor","屋頂":"outdoor",
+};
+
+const EMOTION_MAP = {
+  "焦慮":"😰","亢奮":"🤩","謹慎":"🧐","開心":"😊","憤怒":"😤",
+  "平靜":"😌","疲憊":"😩","興奮":"😄","擔憂":"😟","自信":"😎",
+  "困惑":"😕","緊張":"😬","沮喪":"😔","專注":"🧑‍💻","思考":"🤔",
+};
+
+const CHAR_COLORS = ["c0","c1","c2","c3","c4"];
+const EVT_COLORS  = {"危機":"danger","事故":"danger","會議":"meeting","里程碑":"milestone"};
+
+let worldData = null, charsData = [], currentTab = "chars";
+let showRelations = false, mapScale = 1;
+let selectedChar = null, activeChar = null;
+let autoRefreshTimer = null;
+
+// ══════════════════════════════════════════════════════════════
+// 初始化地圖
+// ══════════════════════════════════════════════════════════════
+function initMap() {
+  const mapInner = document.getElementById("map-inner");
+  ROOMS.forEach(room => {
+    const el = document.createElement("div");
+    el.className = `room ${room.cls}`;
+    el.id = `room-${room.id}`;
+    el.style.cssText = `left:${room.x}%;top:${room.y}%;width:${room.w}%;height:${room.h}%;`;
+    el.innerHTML = `<div class="room-label">${room.label}</div><div class="room-icon">${room.icon}</div>`;
+    mapInner.appendChild(el);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// 資料載入
+// ══════════════════════════════════════════════════════════════
+async function loadWorld() {
+  try {
+    const [wRes, cRes] = await Promise.all([
+      fetch("/ai/world"),
+      fetch("/ai/characters"),
+    ]);
+    worldData = await wRes.json();
+    charsData = await cRes.json();
+    renderAll();
+    document.getElementById("last-update").textContent =
+      "更新：" + new Date().toLocaleTimeString("zh-TW");
+  } catch(e) {
+    // 用示範資料 fallback
+    useDemoData();
+    renderAll();
+  }
+}
+
+function useDemoData() {
+  worldData = {
+    meta: { world_name:"燦流科技", current_date:"2026-03-10", phase:"Q1 衝刺期", atmosphere:"緊張" },
+    character_states: {
+      "char_001":{ emotion:"焦慮", location:"辦公室", current_task:"修復支付系統 bug", private_notes:"擔心 deadline" },
+      "char_002":{ emotion:"亢奮", location:"會議室", current_task:"準備新功能提案",  private_notes:"想推三個功能" },
+      "char_003":{ emotion:"謹慎", location:"辦公室", current_task:"審查 Q1 預算",     private_notes:"發現費用異常" },
+    },
+    event_history: [
+      { id:"e1", date:"2026-03-09", type:"危機",  title:"支付系統當機", description:"緊急修復中", status:"處理中" },
+      { id:"e2", date:"2026-03-08", type:"會議",  title:"Q1 預算檢討", description:"發現費用異常", status:"待解決" },
+    ]
+  };
+  charsData = [
+    { id:"char_001", name:"李美玲", role:"後端工程師", avatar:"李",
+      relationships:{"char_002":"合作但有摩擦","char_003":"尊重但少接觸"} },
+    { id:"char_002", name:"羅威成", role:"產品經理",   avatar:"羅",
+      relationships:{"char_001":"依賴技術判斷","char_003":"常被潑冷水"} },
+    { id:"char_003", name:"鄭國豪", role:"財務長",     avatar:"鄭",
+      relationships:{"char_001":"信任判斷","char_002":"覺得不夠務實"} },
+  ];
+}
+
+// ══════════════════════════════════════════════════════════════
+// 渲染全部
+// ══════════════════════════════════════════════════════════════
+function renderAll() {
+  if(!worldData) return;
+
+  // Header
+  const meta = worldData.meta || worldData.world_meta || {};
+  document.getElementById("world-name").textContent =
+    meta.world_name || meta.name || "世界地圖";
+  document.getElementById("world-meta").textContent =
+    [meta.phase, meta.atmosphere].filter(Boolean).join(" · ");
+  document.getElementById("world-date").textContent =
+    "📅 " + (meta.current_date || meta.date || "");
+
+  // 清除舊角色節點
+  document.querySelectorAll(".char-node").forEach(e => e.remove());
+
+  // 渲染角色
+  const states = worldData.character_states || {};
+  charsData.forEach((char, idx) => {
+    const state = states[char.id] || {};
+    renderChar(char, state, idx);
+  });
+
+  document.getElementById("char-count").textContent = `👤 ${charsData.length} 位角色`;
+
+  // 關係線
+  if(showRelations) drawRelations();
+
+  // Sidebar
+  renderSidebar();
+}
+
+function renderChar(char, state, idx) {
+  const mapInner = document.getElementById("map-inner");
+  const loc = state.location || "辦公室";
+  const roomId = LOC_MAP[loc] || "outdoor";
+  const room = ROOMS.find(r => r.id === roomId) || ROOMS[0];
+  const emotion = state.emotion || "平靜";
+  const emotionEmoji = EMOTION_MAP[emotion] || "😶";
+
+  // 在房間內算位置（避免重疊）
+  const charIdx = charsData.findIndex(c => c.id === char.id);
+  const roomChars = charsData.filter((c,i) => {
+    const s = (worldData.character_states||{})[c.id]||{};
+    return (LOC_MAP[s.location||"辦公室"]||"outdoor") === roomId;
+  });
+  const posInRoom = roomChars.findIndex(c => c.id === char.id);
+  const total = roomChars.length;
+
+  // 計算節點在房間內的位置
+  const pad = 12;
+  const xRatio = total > 1 ? (posInRoom + 0.5) / total : 0.5;
+  const nodeX = room.x + pad/window.innerWidth*100 + xRatio * (room.w - 2*pad/window.innerWidth*100);
+  const nodeY = room.y + 35 / window.innerHeight * 100;
+
+  const node = document.createElement("div");
+  node.className = `char-node char-${CHAR_COLORS[idx % CHAR_COLORS.length]}`;
+  node.id = `char-node-${char.id}`;
+  node.style.cssText = `left:${nodeX}%;top:${nodeY}%;`;
+  node.dataset.charId = char.id;
+
+  node.innerHTML = `
+    <div class="char-avatar" data-emotion="${emotionEmoji}">${char.avatar || char.name[0]}</div>
+    <div class="char-name">${char.name}</div>
+    <div class="char-task">${state.current_task || ""}</div>
+  `;
+
+  node.addEventListener("click", () => selectChar(char.id));
+  node.addEventListener("mouseenter", () => showBubble(char.id, state));
+  node.addEventListener("mouseleave", () => hideBubble(char.id));
+
+  mapInner.appendChild(node);
+
+  // 說話泡泡
+  const bubble = document.createElement("div");
+  bubble.className = "speech-bubble";
+  bubble.id = `bubble-${char.id}`;
+  bubble.style.cssText = `left:${nodeX + 4}%;top:${nodeY - 10}%;`;
+  mapInner.appendChild(bubble);
+}
+
+function showBubble(charId, state) {
+  const bubble = document.getElementById(`bubble-${charId}`);
+  if(!bubble) return;
+  const lines = [];
+  if(state.emotion) lines.push(`心情：${state.emotion} ${EMOTION_MAP[state.emotion]||""}`);
+  if(state.current_task) lines.push(`任務：${state.current_task}`);
+  if(state.private_notes) lines.push(`想法：${state.private_notes}`);
+  bubble.textContent = lines.join("\n");
+  bubble.classList.add("show");
+}
+function hideBubble(charId) {
+  const bubble = document.getElementById(`bubble-${charId}`);
+  if(bubble) bubble.classList.remove("show");
+}
+
+// ══════════════════════════════════════════════════════════════
+// 關係連線
+// ══════════════════════════════════════════════════════════════
+function drawRelations() {
+  const canvas = document.getElementById("rel-canvas");
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width;
+  canvas.height = rect.height;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  if(!showRelations) return;
+
+  charsData.forEach(char => {
+    const state = (worldData.character_states||{})[char.id]||{};
+    const rels = char.relationships || state.relationships || {};
+    Object.entries(rels).forEach(([targetId, relDesc]) => {
+      const fromNode = document.getElementById(`char-node-${char.id}`);
+      const toNode = document.getElementById(`char-node-${targetId}`);
+      if(!fromNode || !toNode) return;
+
+      const fromR = fromNode.getBoundingClientRect();
+      const toR = toNode.getBoundingClientRect();
+      const canvasR = canvas.getBoundingClientRect();
+
+      const x1 = fromR.left + fromR.width/2 - canvasR.left;
+      const y1 = fromR.top + fromR.height/2 - canvasR.top;
+      const x2 = toR.left + toR.width/2 - canvasR.left;
+      const y2 = toR.top + toR.height/2 - canvasR.top;
+
+      const isPositive = relDesc.includes("信任")||relDesc.includes("合作")||relDesc.includes("依賴");
+      ctx.strokeStyle = isPositive ? "rgba(63,185,80,.5)" : "rgba(248,81,73,.4)";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5,5]);
+      ctx.beginPath();
+      ctx.moveTo(x1,y1);
+
+      // 曲線
+      const cx = (x1+x2)/2 + (y2-y1)*0.15;
+      const cy = (y1+y2)/2 + (x1-x2)*0.15;
+      ctx.quadraticCurveTo(cx, cy, x2, y2);
+      ctx.stroke();
+
+      // 關係文字
+      const mx = (x1+x2)/2 + (cy-y1)*0.1;
+      const my = (y1+y2)/2;
+      ctx.fillStyle = "rgba(139,148,158,.8)";
+      ctx.font = "10px system-ui";
+      ctx.fillText(relDesc.slice(0,8), mx, my);
+    });
+  });
+}
+
+function toggleRelations() {
+  showRelations = !showRelations;
+  if(showRelations) drawRelations();
+  else {
+    const canvas = document.getElementById("rel-canvas");
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// 角色選取 & Sidebar
+// ══════════════════════════════════════════════════════════════
+function selectChar(charId) {
+  selectedChar = charId;
+  document.querySelectorAll(".char-node").forEach(n => n.style.filter="");
+  document.querySelectorAll(".char-card").forEach(c => c.classList.remove("active"));
+
+  const node = document.getElementById(`char-node-${charId}`);
+  if(node) node.style.filter = "drop-shadow(0 0 12px var(--accent))";
+
+  const card = document.getElementById(`card-${charId}`);
+  if(card) {card.classList.add("active"); card.scrollIntoView({block:"nearest"});}
+
+  if(currentTab !== "chars") setTab("chars");
+}
+
+function setTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll(".stab").forEach((el,i) => {
+    el.classList.toggle("active", ["chars","events","world"][i] === tab);
+  });
+  renderSidebar();
+}
+
+function renderSidebar() {
+  const el = document.getElementById("sidebar-content");
+  if(currentTab === "chars") renderCharsSidebar(el);
+  else if(currentTab === "events") renderEventsSidebar(el);
+  else renderWorldSidebar(el);
+}
+
+function renderCharsSidebar(el) {
+  const states = worldData?.character_states || {};
+  el.innerHTML = charsData.map((char, idx) => {
+    const state = states[char.id] || {};
+    const emotion = state.emotion || "—";
+    const emojiEmo = EMOTION_MAP[emotion] || "";
+    const emoColor = {"焦慮":"#f85149","亢奮":"#bc8cff","謹慎":"#d29922",
+      "開心":"#3fb950","憤怒":"#f85149","平靜":"#58a6ff"}[emotion] || "var(--dim)";
+    const rels = char.relationships || state.relationships || {};
+
+    return `<div class="char-card${selectedChar===char.id?" active":""}"
+        id="card-${char.id}" onclick="selectChar('${char.id}')">
+      <div class="char-card-header">
+        <div class="char-card-av char-${CHAR_COLORS[idx%CHAR_COLORS.length]}"
+          style="border:2px solid">${char.avatar||char.name[0]}</div>
+        <div class="char-card-info">
+          <div class="char-card-name">${char.name}</div>
+          <div class="char-card-role">${char.role||""}</div>
+        </div>
+        <span class="emotion-badge" style="background:${emoColor}22;color:${emoColor}">${emojiEmo} ${emotion}</span>
+      </div>
+      <div class="char-detail-row">
+        <span class="char-detail-label">📍 位置</span>
+        <span class="char-detail-val">${state.location||"未知"}</span>
+      </div>
+      <div class="char-detail-row">
+        <span class="char-detail-label">🎯 任務</span>
+        <span class="char-detail-val">${state.current_task||"—"}</span>
+      </div>
+      ${state.private_notes?`<div class="char-detail-row">
+        <span class="char-detail-label">💭 想法</span>
+        <span class="char-detail-val" style="color:var(--dim)">${state.private_notes}</span>
+      </div>`:""}
+      ${Object.keys(rels).length?`<div style="margin-top:6px;font-size:.68rem;color:var(--dim)">
+        ${Object.entries(rels).map(([tid,rel])=>{
+          const tc = charsData.find(c=>c.id===tid);
+          return tc?`<div>↔ ${tc.name}：${rel}</div>`:"";
+        }).join("")}
+      </div>`:""}
+      <div style="margin-top:8px;display:flex;gap:6px">
+        <button onclick="event.stopPropagation();chatWith('${char.id}','${char.name}')"
+          style="flex:1;background:none;border:1px solid var(--border);color:var(--dim);
+          padding:4px;border-radius:6px;cursor:pointer;font-size:.72rem">💬 對話</button>
+        <button onclick="event.stopPropagation();triggerAction('${char.id}','${char.name}')"
+          style="flex:1;background:none;border:1px solid #2a4a22;color:#3fb950;
+          padding:4px;border-radius:6px;cursor:pointer;font-size:.72rem">▶ 行動</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function renderEventsSidebar(el) {
+  const events = worldData?.event_history || [];
+  if(!events.length) {el.innerHTML='<div style="color:var(--dim);font-size:.8rem;padding:8px">尚無事件記錄</div>';return;}
+  el.innerHTML = events.slice().reverse().map(evt => {
+    const cls = EVT_COLORS[evt.type] || "general";
+    const icons = {"危機":"🚨","會議":"🗣","里程碑":"🎯","事故":"⚠️"};
+    return `<div class="evt-item ${cls}">
+      <div class="evt-date">${evt.date||""} · ${evt.type||""} ${icons[evt.type]||"📌"}</div>
+      <div class="evt-title">${evt.title}</div>
+      <div class="evt-desc">${evt.description||""}</div>
+      ${evt.status?`<div style="font-size:.68rem;color:var(--accent);margin-top:3px">→ ${evt.status}</div>`:""}
+    </div>`;
+  }).join("");
+}
+
+function renderWorldSidebar(el) {
+  const meta = worldData?.meta || worldData?.world_meta || {};
+  const states = worldData?.character_states || {};
+  const charCount = charsData.length;
+  const emotions = charsData.map(c => (states[c.id]||{}).emotion).filter(Boolean);
+
+  el.innerHTML = `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">
+      <div style="font-size:.75rem;color:var(--dim);margin-bottom:10px">🌐 世界資訊</div>
+      <div class="char-detail-row"><span class="char-detail-label">名稱</span><span class="char-detail-val">${meta.world_name||meta.name||"—"}</span></div>
+      <div class="char-detail-row"><span class="char-detail-label">日期</span><span class="char-detail-val">${meta.current_date||meta.date||"—"}</span></div>
+      <div class="char-detail-row"><span class="char-detail-label">階段</span><span class="char-detail-val">${meta.phase||"—"}</span></div>
+      <div class="char-detail-row"><span class="char-detail-label">氛圍</span><span class="char-detail-val">${meta.atmosphere||meta.overall_mood||"—"}</span></div>
+      <div class="char-detail-row"><span class="char-detail-label">角色數</span><span class="char-detail-val">${charCount} 位</span></div>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">
+      <div style="font-size:.75rem;color:var(--dim);margin-bottom:8px">😶 情緒分布</div>
+      ${emotions.map(e=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:.78rem">
+        <span>${EMOTION_MAP[e]||"😶"}</span><span>${e}</span>
+      </div>`).join("")}
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px">
+      <div style="font-size:.75rem;color:var(--dim);margin-bottom:8px">📍 各位置</div>
+      ${ROOMS.filter(r=>r.id!=="outdoor").map(room=>{
+        const chars = charsData.filter(c=>{
+          const s=(states[c.id]||{});
+          return (LOC_MAP[s.location||"辦公室"]||"outdoor")===room.id;
+        });
+        if(!chars.length) return "";
+        return `<div style="margin-bottom:6px;font-size:.78rem">
+          <span style="color:var(--dim)">${room.icon} ${room.label}：</span>
+          ${chars.map(c=>`<span>${c.name}</span>`).join("、")}
+        </div>`;
+      }).join("")}
+    </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// 操作按鈕
+// ══════════════════════════════════════════════════════════════
+function chatWith(charId, charName) {
+  window.location.href = "/ai?char=" + charId + "&from=view";
+}
+
+async function triggerAction(charId, charName) {
+  showToast(`▶ ${charName} 開始行動…`);
+  try {
+    const res = await fetch(`/ai/agent/run/${charId}`, {method:"POST"}).then(r=>r.json());
+    showToast(`✅ ${charName} 完成行動！重新整理查看結果`, 3000);
+    setTimeout(loadWorld, 3500);
+  } catch(e) {
+    showToast(`❌ 無法觸發行動：${e.message}`);
+  }
+}
+
+function showToast(msg, duration=2000) {
+  const el = document.getElementById("action-toast");
+  el.textContent = msg;
+  el.style.display = "block";
+  clearTimeout(el._timer);
+  el._timer = setTimeout(()=>el.style.display="none", duration);
+}
+
+// ══════════════════════════════════════════════════════════════
+// 縮放
+// ══════════════════════════════════════════════════════════════
+function zoom(factor) {
+  mapScale = Math.max(0.5, Math.min(2.5, mapScale * factor));
+  document.getElementById("map-inner").style.transform = `scale(${mapScale})`;
+  if(showRelations) setTimeout(drawRelations, 200);
+}
+function resetZoom() {
+  mapScale = 1;
+  document.getElementById("map-inner").style.transform = "scale(1)";
+}
+
+// ══════════════════════════════════════════════════════════════
+// 角色移動動畫（模擬）
+// ══════════════════════════════════════════════════════════════
+function animateChars() {
+  // 輕微漂浮效果
+  document.querySelectorAll(".char-node").forEach((node, i) => {
+    const offset = Math.sin(Date.now()/1800 + i * 1.2) * 3;
+    const baseTop = parseFloat(node.dataset.baseTop || node.style.top);
+    if(!node.dataset.baseTop) node.dataset.baseTop = node.style.top;
+    node.style.top = (baseTop + offset/window.innerHeight*100*0.5) + "%";
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// 啟動
+// ══════════════════════════════════════════════════════════════
+initMap();
+loadWorld();
+
+// 自動更新
+autoRefreshTimer = setInterval(loadWorld, 30000);
+
+// 漂浮動畫
+setInterval(animateChars, 50);
+
+// 視窗縮放時重繪關係線
+window.addEventListener("resize", () => {
+  if(showRelations) drawRelations();
+});
+
+// 鍵盤快捷鍵
+document.addEventListener("keydown", e => {
+  if(e.key==="r"||e.key==="R") loadWorld();
+  if(e.key==="l"||e.key==="L") toggleRelations();
+  if(e.key==="Escape") {
+    selectedChar = null;
+    document.querySelectorAll(".char-node").forEach(n=>n.style.filter="");
+  }
+});
+</script>
+</body>
+</html>

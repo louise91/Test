@@ -1,0 +1,1717 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>世界地圖</title>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0a0e14;--panel:#111820;--border:#1e2a3a;
+  --text:#c8d8e8;--dim:#4a6a8a;--accent:#4af;
+  --green:#4a8;--orange:#ca6;--red:#c44;--yellow:#cc4;
+  --pixel:2px;
+}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:'DotGothic16','Noto Sans TC',monospace;
+  display:flex;height:100dvh;overflow:hidden;
+  image-rendering:pixelated;
+}
+
+/* ── 主畫面 ── */
+#game-wrap{flex:1;display:flex;flex-direction:column;position:relative;overflow:hidden;}
+
+/* 頂部 HUD */
+#hud{
+  padding:8px 14px;background:var(--panel);
+  border-bottom:2px solid var(--border);
+  display:flex;align-items:center;gap:14px;
+  position:relative;z-index:30;
+}
+#hud-title{font-size:1rem;color:var(--accent);letter-spacing:.1em;}
+#hud-date{font-size:.72rem;color:var(--orange);}
+#hud-mood{font-size:.72rem;padding:2px 8px;border:1px solid var(--border);border-radius:3px;}
+#hud-btns{margin-left:auto;display:flex;gap:6px;}
+.hud-btn{
+  background:var(--panel);border:1px solid var(--border);
+  color:var(--dim);padding:4px 10px;border-radius:3px;
+  cursor:pointer;font-size:.72rem;font-family:inherit;
+  transition:.15s;
+}
+.hud-btn:hover{border-color:var(--accent);color:var(--accent);}
+.hud-btn.active{border-color:var(--green);color:var(--green);}
+
+/* Canvas 容器 */
+#canvas-wrap{
+  flex:1;overflow:hidden;position:relative;
+  background:#0a0e14;
+  cursor:default;
+}
+#game-canvas{
+  display:block;
+  image-rendering:pixelated;
+  image-rendering:crisp-edges;
+}
+
+/* 底部狀態列 */
+#status-bar{
+  padding:5px 14px;background:var(--panel);
+  border-top:2px solid var(--border);
+  font-size:.68rem;color:var(--dim);
+  display:flex;gap:16px;align-items:center;
+}
+#status-msg{color:var(--text);}
+.pulse{display:inline-block;width:6px;height:6px;border-radius:50%;
+  background:var(--green);animation:blink 1.5s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+/* ── 右側資訊欄 ── */
+#sidebar{
+  width:240px;border-left:2px solid var(--border);
+  background:var(--panel);display:flex;flex-direction:column;
+  overflow:hidden;
+}
+#sidebar-tabs{display:flex;border-bottom:2px solid var(--border);}
+.stab{
+  flex:1;padding:8px 0;text-align:center;font-size:.72rem;
+  cursor:pointer;color:var(--dim);border-bottom:3px solid transparent;
+  transition:.15s;font-family:inherit;background:none;border-top:none;
+  border-left:none;border-right:none;
+}
+.stab.active{color:var(--accent);border-bottom-color:var(--accent);}
+#sidebar-body{flex:1;overflow-y:auto;padding:10px;}
+#sidebar-body::-webkit-scrollbar{width:4px;}
+#sidebar-body::-webkit-scrollbar-thumb{background:var(--border);}
+
+/* 角色卡 */
+.char-card{
+  background:var(--bg);border:1px solid var(--border);
+  border-radius:4px;padding:10px;margin-bottom:8px;
+  cursor:pointer;transition:.15s;
+}
+.char-card:hover,.char-card.selected{border-color:var(--accent);}
+.char-card-top{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.char-sprite-preview{
+  width:32px;height:32px;image-rendering:pixelated;
+  border:1px solid var(--border);border-radius:2px;
+  flex-shrink:0;
+}
+.char-name-big{font-size:.9rem;font-weight:700;color:var(--text);}
+.char-role-sm{font-size:.65rem;color:var(--dim);}
+.char-row{display:flex;gap:6px;font-size:.7rem;margin-bottom:3px;}
+.char-label{color:var(--dim);min-width:42px;}
+.char-val{color:var(--text);}
+.emo-pill{
+  display:inline-block;padding:1px 7px;border-radius:2px;
+  font-size:.65rem;font-weight:700;
+}
+
+/* 事件 */
+.evt-item{
+  border-left:3px solid var(--border);
+  padding:6px 8px;margin-bottom:7px;font-size:.72rem;
+}
+.evt-item.crisis{border-color:var(--red);}
+.evt-item.meeting{border-color:#8af;}
+.evt-item.milestone{border-color:var(--green);}
+.evt-date{color:var(--dim);font-size:.64rem;margin-bottom:2px;}
+.evt-title{color:var(--text);font-weight:700;}
+.evt-desc{color:var(--dim);margin-top:2px;line-height:1.4;}
+
+/* 對話框 — RPG 底部橫條風格 */
+#dialog-box{
+  position:fixed;bottom:0;left:0;right:0;
+  background:rgba(10,16,28,.97);
+  border-top:2px solid var(--accent);
+  padding:12px 16px 16px;
+  display:none;z-index:200;
+  box-shadow:0 -4px 32px rgba(68,170,255,.25);
+  animation:slideUp .2s ease;
+}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+#dialog-inner{
+  display:flex;align-items:flex-start;gap:14px;
+  max-width:700px;margin:0 auto;
+}
+#dialog-avatar{
+  width:56px;height:56px;border-radius:50%;
+  border:2px solid var(--accent);
+  background:var(--panel);
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.6rem;flex-shrink:0;
+}
+#dialog-body{flex:1;min-width:0;}
+#dialog-name{font-size:.8rem;color:var(--accent);margin-bottom:4px;font-weight:700;}
+#dialog-text{color:var(--text);font-size:.82rem;line-height:1.6;}
+#dialog-actions{
+  display:flex;flex-direction:column;gap:6px;flex-shrink:0;
+}
+#dialog-close{
+  background:none;border:1px solid var(--border);color:var(--dim);
+  padding:4px 10px;border-radius:5px;cursor:pointer;font-size:.75rem;font-family:inherit;
+}
+#dialog-chat-btn{
+  background:#0d2040;border:1px solid #4af;color:#4af;
+  padding:6px 14px;border-radius:5px;cursor:pointer;
+  font-size:.78rem;font-family:inherit;white-space:nowrap;
+}
+#dialog-close:hover{color:var(--text);}
+
+/* 迷你地圖 */
+#minimap{
+  position:absolute;bottom:40px;right:10px;
+  border:1px solid var(--border);background:rgba(10,14,20,.9);
+  z-index:25;
+}
+</style>
+</head>
+<body>
+
+<div id="game-wrap">
+  <div id="hud">
+    <span id="hud-title">▶ 載入中…</span>
+    <span id="hud-time" style="color:var(--orange);font-size:.78rem"></span>
+    <span id="hud-weather" style="font-size:.78rem;cursor:pointer" title="點擊更新天氣" onclick="refreshWeather()"></span>
+    <span id="hud-mood" style="font-size:.72rem;padding:2px 7px;border:1px solid var(--border);border-radius:3px"></span>
+    <div id="hud-btns">
+      <button class="hud-btn" onclick="openChat()">💬 聊天室</button>
+      <button class="hud-btn" onclick="window.location.href='/ai/world/view'">📊 關係圖</button>
+      <button class="hud-btn" id="tick-btn" onclick="showTickMenu()">⏩ 推進</button>
+      <button class="hud-btn" onclick="toggleGrid()">格線</button>
+      <button class="hud-btn" onclick="toggleNames()">名稱</button>
+      <button class="hud-btn" id="rel-btn" onclick="toggleRel()">關係線</button>
+      <button class="hud-btn" onclick="loadWorld()">↻ 更新</button>
+    </div>
+  </div>
+
+  <div id="canvas-wrap">
+    <canvas id="game-canvas"></canvas>
+    <canvas id="particle-canvas" style="position:absolute;inset:0;pointer-events:none;z-index:15"></canvas>
+    <canvas id="minimap" width="120" height="80"></canvas>
+    <!-- 時間推進選單 -->
+    <div id="tick-menu" style="display:none;position:absolute;top:52px;left:50%;transform:translateX(-50%);
+      background:var(--panel);border:2px solid var(--accent);border-radius:6px;
+      padding:12px;z-index:60;display:none;gap:8px;flex-direction:column;min-width:220px">
+      <div style="font-size:.78rem;color:var(--accent);font-weight:700;margin-bottom:4px">⏩ 時間推進</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="hud-btn" onclick="doTick('hour',1)">+1小時</button>
+        <button class="hud-btn" onclick="doTick('hour',4)">+4小時</button>
+        <button class="hud-btn" onclick="doTick('hour',8)">+8小時</button>
+        <button class="hud-btn" onclick="doTick('day',1)">+1天</button>
+        <button class="hud-btn" onclick="doTick('day',7)">+1週</button>
+      </div>
+      <label style="font-size:.7rem;color:var(--dim);display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="tick-ai-update"> AI 同步更新角色狀態
+      </label>
+      <button onclick="document.getElementById('tick-menu').style.display='none'"
+        style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:.72rem;font-family:inherit;text-align:right">關閉</button>
+    </div>
+
+    <div id="dialog-box">
+      <div id="dialog-inner">
+        <div id="dialog-avatar">👤</div>
+        <div id="dialog-body">
+          <div id="dialog-name"></div>
+          <div id="dialog-text"></div>
+        </div>
+        <div id="dialog-actions">
+          <button id="dialog-chat-btn" onclick="chatWithChar(window._dialogCharId)">💬 對話</button>
+          <button id="dialog-close" onclick="closeDialog()">✕ 關閉</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="status-bar">
+    <span class="pulse"></span>
+    <span id="status-msg">載入世界…</span>
+    <span id="char-pos" style="margin-left:auto"></span>
+  </div>
+</div>
+
+<div id="sidebar">
+  <div id="sidebar-tabs">
+    <button class="stab active" onclick="setTab('chars')">角色</button>
+    <button class="stab" onclick="setTab('events')">事件</button>
+    <button class="stab" onclick="setTab('world')">世界</button>
+  </div>
+  <div id="sidebar-body"></div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// 常數與設定
+// ══════════════════════════════════════════════════════════════
+const TILE   = 32;   // 每格像素
+const COLS   = 40;   // 地圖寬（格）
+const ROWS   = 30;   // 地圖高（格）
+
+// 地圖 tile 種類
+const T = {
+  GRASS:0, FLOOR:1, WALL:2, DESK:3, CHAIR:4, COMPUTER:5,
+  DOOR:6, TABLE:7, PLANT:8, CARPET:9, WINDOW:10,
+  BOOKSHELF:11, SERVER:12, SOFA:13, WHITEBOARD:14, WATER:15,
+};
+
+// 顏色調色盤（像素風）
+const PAL = {
+  [T.GRASS]:    ['#1a2e1a','#1e341e','#162614'],
+  [T.FLOOR]:    ['#2a2a3a','#252535','#2e2e40'],
+  [T.WALL]:     ['#3a3a4a','#353545','#404055'],
+  [T.DESK]:     ['#5a3a1a','#6a4520','#4e301a'],
+  [T.CHAIR]:    ['#3a2a5a','#45356a','#302248'],
+  [T.COMPUTER]: ['#1a3a5a','#1e4568','#152e4a'],
+  [T.DOOR]:     ['#6a4a2a','#7a5535','#5a3e22'],
+  [T.TABLE]:    ['#4a3a2a','#564530','#3e3022'],
+  [T.PLANT]:    ['#1a4a1a','#204e20','#163e16'],
+  [T.CARPET]:   ['#2a1a3a','#352045','#221530'],
+  [T.WINDOW]:   ['#1a3a5a','#1e4a6a','#152e4a'],
+  [T.BOOKSHELF]:['#4a2a1a','#5a3220','#3e2216'],
+  [T.SERVER]:   ['#1a3a3a','#1e4444','#152e2e'],
+  [T.SOFA]:     ['#3a1a1a','#451e1e','#2e1515'],
+  [T.WHITEBOARD]:['#e8e8f0','#d8d8e8','#f0f0f8'],
+  [T.WATER]:    ['#1a2a4a','#1e3456','#152238'],
+};
+
+// 房間定義（格座標）
+const ROOMS = [
+  {id:'office',  name:'辦公區',   x:1,  y:1,  w:16, h:14, floor:T.FLOOR,  icon:'💻'},
+  {id:'meeting', name:'會議室',   x:19, y:1,  w:10, h:10, floor:T.CARPET, icon:'🗣'},
+  {id:'lounge',  name:'休息區',   x:19, y:13, w:10, h:8,  floor:T.FLOOR,  icon:'☕'},
+  {id:'ceo',     name:'董事長室', x:31, y:1,  w:8,  h:10, floor:T.CARPET, icon:'👔'},
+  {id:'server',  name:'機房',     x:31, y:13, w:8,  h:8,  floor:T.FLOOR,  icon:'🖥'},
+  {id:'lobby',   name:'大廳',     x:1,  y:17, w:16, h:9,  floor:T.FLOOR,  icon:'🏢'},
+  {id:'outdoor', name:'戶外',     x:1,  y:27, w:38, h:2,  floor:T.GRASS,  icon:'🌿'},
+];
+
+// 位置名 → 房間 id
+const LOC_MAP = {
+  '辦公室':'office','辦公區':'office','工作區':'office',
+  '會議室':'meeting','會議區':'meeting',
+  '休息區':'lounge','茶水間':'lounge','休息室':'lounge',
+  '大廳':'lobby','入口':'lobby',
+  '機房':'server','伺服器室':'server',
+  '執行長辦公室':'ceo','董事長室':'ceo','老闆辦公室':'ceo',
+  '戶外':'outdoor','室外':'outdoor',
+};
+
+// 情緒顏色
+const EMO_COL = {
+  '焦慮':'#f85149','亢奮':'#bc8cff','謹慎':'#d29922','開心':'#3fb950',
+  '憤怒':'#f85149','平靜':'#58a6ff','疲憊':'#8b949e','興奮':'#e0a020',
+  '擔憂':'#e8a87e','自信':'#4af','困惑':'#cc8','緊張':'#f00a',
+  '沮喪':'#888','專注':'#0af','思考':'#aaf',
+};
+const EMO_EMO = {
+  '焦慮':'😰','亢奮':'🤩','謹慎':'🧐','開心':'😊','憤怒':'😤',
+  '平靜':'😌','疲憊':'😩','興奮':'😄','擔憂':'😟','自信':'😎',
+  '困惑':'😕','緊張':'😬','沮喪':'😔','專注':'💻','思考':'🤔',
+};
+
+// 角色調色（像素小人）
+const CHAR_SKINS = [
+  {body:'#4af',hair:'#224',skin:'#fda'},
+  {body:'#c8f',hair:'#442',skin:'#fca'},
+  {body:'#fa8',hair:'#332',skin:'#fdb'},
+  {body:'#4f8',hair:'#443',skin:'#fea'},
+  {body:'#ff6',hair:'#333',skin:'#fda'},
+];
+
+// ══════════════════════════════════════════════════════════════
+// 狀態
+// ══════════════════════════════════════════════════════════════
+let canvas, ctx, miniCanvas, miniCtx;
+let worldData = null, charsData = [];
+let tileMap = [];
+let chars = [];        // 渲染用角色物件
+let camX = 0, camY = 0;
+let showGrid = false, showNames = true, showRel = false;
+let selectedCharId = null;
+let currentTab = 'chars';
+let animFrame = 0;
+let dragging = false, dragStart = {x:0,y:0}, camStart = {x:0,y:0};
+let hoverCharId = null;
+
+// ══════════════════════════════════════════════════════════════
+// 地圖生成
+// ══════════════════════════════════════════════════════════════
+function buildTileMap() {
+  // 初始化為草地/空地
+  tileMap = Array.from({length:ROWS}, () => Array(COLS).fill(T.GRASS));
+
+  // 畫房間
+  ROOMS.forEach(room => {
+    for(let y=room.y; y<room.y+room.h; y++) {
+      for(let x=room.x; x<room.x+room.w; x++) {
+        if(y===room.y||y===room.y+room.h-1||x===room.x||x===room.x+room.w-1) {
+          setTile(x,y,T.WALL);
+        } else {
+          setTile(x,y,room.floor);
+        }
+      }
+    }
+    // 門
+    const dx = room.x + Math.floor(room.w/2);
+    const dy = room.y + room.h - 1;
+    setTile(dx, dy, T.DOOR);
+  });
+
+  // 辦公桌
+  const office = ROOMS[0];
+  for(let row=0; row<3; row++) {
+    for(let col=0; col<3; col++) {
+      const tx = office.x + 2 + col*4;
+      const ty = office.y + 2 + row*4;
+      setTile(tx, ty, T.DESK);
+      setTile(tx+1, ty, T.COMPUTER);
+      setTile(tx, ty+1, T.CHAIR);
+    }
+  }
+  // 植栽
+  setTile(office.x+1, office.y+1, T.PLANT);
+  setTile(office.x+office.w-2, office.y+1, T.PLANT);
+  // 書架
+  for(let i=1; i<4; i++) setTile(office.x+i, office.y+2, T.BOOKSHELF);
+
+  // 會議桌
+  const meet = ROOMS[1];
+  for(let i=1; i<meet.w-1; i++) setTile(meet.x+i, meet.y+3, T.TABLE);
+  for(let i=1; i<meet.w-1; i++) setTile(meet.x+i, meet.y+4, T.TABLE);
+  setTile(meet.x+1, meet.y+2, T.CHAIR); setTile(meet.x+3,meet.y+2,T.CHAIR);
+  setTile(meet.x+5, meet.y+2, T.CHAIR); setTile(meet.x+7,meet.y+2,T.CHAIR);
+  setTile(meet.x+meet.w-2, meet.y+3, T.WHITEBOARD);
+  setTile(meet.x+1, meet.y+1, T.PLANT);
+
+  // 休息區
+  const lounge = ROOMS[2];
+  setTile(lounge.x+1, lounge.y+2, T.SOFA);
+  setTile(lounge.x+2, lounge.y+2, T.SOFA);
+  setTile(lounge.x+3, lounge.y+2, T.SOFA);
+  setTile(lounge.x+1, lounge.y+4, T.TABLE);
+  setTile(lounge.x+lounge.w-2, lounge.y+1, T.PLANT);
+
+  // 機房
+  const server = ROOMS[4];
+  for(let i=1; i<server.w-1; i+=2) {
+    setTile(server.x+i, server.y+2, T.SERVER);
+    setTile(server.x+i, server.y+3, T.SERVER);
+    setTile(server.x+i, server.y+5, T.SERVER);
+  }
+
+  // 董事長室
+  const ceo = ROOMS[3];
+  setTile(ceo.x+2, ceo.y+3, T.DESK);
+  setTile(ceo.x+3, ceo.y+3, T.DESK);
+  setTile(ceo.x+2, ceo.y+4, T.CHAIR);
+  setTile(ceo.x+1, ceo.y+1, T.BOOKSHELF);
+  setTile(ceo.x+2, ceo.y+1, T.BOOKSHELF);
+  setTile(ceo.x+ceo.w-2, ceo.y+1, T.PLANT);
+
+  // 大廳
+  const lobby = ROOMS[5];
+  setTile(lobby.x+1, lobby.y+4, T.SOFA);
+  setTile(lobby.x+2, lobby.y+4, T.SOFA);
+  setTile(lobby.x+lobby.w-2, lobby.y+2, T.PLANT);
+  setTile(lobby.x+lobby.w-3, lobby.y+2, T.PLANT);
+}
+
+function setTile(x,y,t){
+  if(y>=0&&y<ROWS&&x>=0&&x<COLS) tileMap[y][x]=t;
+}
+
+// ══════════════════════════════════════════════════════════════
+// 角色初始化
+// ══════════════════════════════════════════════════════════════
+function initChars() {
+  chars = charsData.map((char, idx) => {
+    const state = (worldData?.character_states||{})[char.id] || {};
+    const loc   = state.location || '辦公室';
+    const roomId = LOC_MAP[loc] || 'office';
+    const room   = ROOMS.find(r=>r.id===roomId) || ROOMS[0];
+
+    // 在房間內找一個走得到的空位
+    const pos = findWalkable(room, idx);
+
+    return {
+      id:    char.id,
+      name:  char.name,
+      role:  char.role || '',
+      avatar:char.avatar || char.name[0],
+      skin:  CHAR_SKINS[idx % CHAR_SKINS.length],
+      // 像素座標（浮點，用於平滑移動）
+      px: pos.x * TILE + TILE/2,
+      py: pos.y * TILE + TILE/2,
+      // 目標格
+      targetX: pos.x,
+      targetY: pos.y,
+      // 當前格
+      tileX: pos.x,
+      tileY: pos.y,
+      // 狀態
+      emotion:   state.emotion || '平靜',
+      task:      state.current_task || '',
+      notes:     state.private_notes || '',
+      location:  loc,
+      roomId:    roomId,
+      // 動畫
+      walkFrame: 0,
+      walkTimer: 0,
+      dir: 'down',
+      moving: false,
+      path: [],      // A* 路徑佇列
+      // 說話
+      speech: '',
+      speechTimer: 0,
+      // 閒逛計時器
+      idleTimer: Math.random() * 180 + 60,
+    };
+  });
+}
+
+function findWalkable(room, idx) {
+  // 在房間中央區域找空位
+  const cx = room.x + Math.floor(room.w/2);
+  const cy = room.y + Math.floor(room.h/2);
+  const offsets = [
+    {x:0,y:0},{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1},
+    {x:2,y:0},{x:-2,y:0},{x:1,y:1},{x:-1,y:1},{x:1,y:-1},
+    {x:3,y:0},{x:-3,y:0},{x:2,y:1},{x:-2,y:1}
+  ];
+  for(const off of offsets) {
+    const nx = cx + off.x + (idx%3 - 1);
+    const ny = cy + off.y + Math.floor(idx/3);
+    if(isWalkable(nx, ny)) return {x:nx, y:ny};
+  }
+  return {x:cx, y:cy};
+}
+
+// 可通行的地板 tile
+const WALKABLE_TILES = new Set([T.FLOOR, T.CARPET, T.GRASS, T.DOOR]);
+// 障礙物 tile（角色繞行）
+const BLOCKED_TILES  = new Set([
+  T.WALL, T.DESK, T.CHAIR, T.COMPUTER,
+  T.TABLE, T.PLANT, T.BOOKSHELF, T.SERVER,
+  T.SOFA, T.WHITEBOARD, T.WINDOW,
+]);
+
+function isWalkable(x, y) {
+  if(x<0||x>=COLS||y<0||y>=ROWS) return false;
+  return WALKABLE_TILES.has(tileMap[y][x]);
+}
+
+// ── A* 路徑尋找 ──
+function astar(sx, sy, gx, gy) {
+  if(!isWalkable(gx, gy)) return null;
+  const key   = (x,y) => x*1000+y;
+  const h     = (x,y) => Math.abs(x-gx)+Math.abs(y-gy);
+  const open  = [{x:sx,y:sy,g:0,h:h(sx,sy),f:h(sx,sy),parent:null}];
+  const closed = new Set();
+  const best   = new Map();
+  best.set(key(sx,sy), 0);
+  const DIRS = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
+
+  let safety = 0;
+  while(open.length && safety++ < 800) {
+    // 找 f 最小的節點
+    let bi=0;
+    for(let i=1;i<open.length;i++) if(open[i].f < open[bi].f) bi=i;
+    const cur = open.splice(bi,1)[0];
+
+    if(cur.x===gx && cur.y===gy) {
+      // 回溯路徑
+      const path=[];
+      let n=cur;
+      while(n){path.unshift({x:n.x,y:n.y});n=n.parent;}
+      return path;
+    }
+    closed.add(key(cur.x,cur.y));
+
+    for(const d of DIRS){
+      const nx=cur.x+d.x, ny=cur.y+d.y;
+      const nk=key(nx,ny);
+      if(closed.has(nk)||!isWalkable(nx,ny)) continue;
+      const ng=cur.g+1;
+      if(best.has(nk)&&best.get(nk)<=ng) continue;
+      best.set(nk,ng);
+      open.push({x:nx,y:ny,g:ng,h:h(nx,ny),f:ng+h(nx,ny),parent:cur});
+    }
+  }
+  return null; // 找不到路
+}
+
+// ── 設定目標（帶路徑）──
+function setCharTarget(char, tx, ty) {
+  const path = astar(char.tileX, char.tileY, tx, ty);
+  if(path && path.length > 1) {
+    char.path      = path.slice(1);  // 去掉起點
+    char.pathIdx   = 0;
+    char.targetX   = path[1].x;
+    char.targetY   = path[1].y;
+    char.moving    = true;
+  } else if(isWalkable(tx, ty)) {
+    // 距離很近或原地
+    char.path    = [];
+    char.targetX = tx;
+    char.targetY = ty;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// 繪圖
+// ══════════════════════════════════════════════════════════════
+function drawTile(x, y, screenX, screenY) {
+  const t = tileMap[y][x];
+  const pal = PAL[t] || PAL[T.GRASS];
+
+  // 底色
+  ctx.fillStyle = pal[0];
+  ctx.fillRect(screenX, screenY, TILE, TILE);
+
+  // 材質細節（像素風噪點）
+  const hash = (x*73856093^y*19349663) >>> 0;
+  if(t === T.GRASS) {
+    ctx.fillStyle = pal[(hash>>2)%3===0?1:0];
+    if((hash&3)===0) {
+      ctx.fillRect(screenX+(hash&7)*4, screenY+((hash>>4)&7)*4, 2, 2);
+    }
+  } else if(t === T.FLOOR || t === T.CARPET) {
+    if((x+y)%2===0) { ctx.fillStyle = pal[1]; ctx.fillRect(screenX,screenY,TILE,TILE); }
+    // 地板縫
+    ctx.fillStyle = 'rgba(0,0,0,.2)';
+    ctx.fillRect(screenX+TILE-1, screenY, 1, TILE);
+    ctx.fillRect(screenX, screenY+TILE-1, TILE, 1);
+  } else if(t === T.WALL) {
+    ctx.fillStyle = pal[1];
+    ctx.fillRect(screenX, screenY, TILE, 4);
+    ctx.fillStyle = 'rgba(0,0,0,.3)';
+    ctx.fillRect(screenX, screenY+TILE-3, TILE, 3);
+  } else if(t === T.DESK) {
+    ctx.fillStyle = pal[1];
+    ctx.fillRect(screenX+2, screenY+4, TILE-4, TILE-8);
+    ctx.fillStyle = pal[2];
+    ctx.fillRect(screenX+2, screenY+4, TILE-4, 3);
+  } else if(t === T.COMPUTER) {
+    // 螢幕
+    ctx.fillStyle = '#0a1a2a';
+    ctx.fillRect(screenX+4, screenY+3, TILE-8, TILE-10);
+    ctx.fillStyle = `hsl(${(Date.now()/50)%360},80%,60%)`;
+    ctx.fillRect(screenX+6, screenY+5, TILE-12, TILE-14);
+    // 底座
+    ctx.fillStyle = '#333';
+    ctx.fillRect(screenX+10, screenY+TILE-6, TILE-20, 4);
+  } else if(t === T.CHAIR) {
+    ctx.fillStyle = pal[1];
+    ctx.fillRect(screenX+4, screenY+4, TILE-8, TILE-8);
+    ctx.fillStyle = pal[2];
+    ctx.fillRect(screenX+4, screenY+4, TILE-8, 3);
+  } else if(t === T.TABLE) {
+    ctx.fillStyle = pal[1];
+    ctx.fillRect(screenX+1, screenY+6, TILE-2, TILE-12);
+    ctx.fillStyle = pal[2];
+    ctx.fillRect(screenX+1, screenY+6, TILE-2, 2);
+  } else if(t === T.PLANT) {
+    // 花盆
+    ctx.fillStyle = '#6a3a1a';
+    ctx.fillRect(screenX+9, screenY+TILE-8, 14, 7);
+    // 葉子
+    ctx.fillStyle = pal[0];
+    ctx.fillRect(screenX+8,  screenY+6,  16, 10);
+    ctx.fillStyle = pal[1];
+    ctx.fillRect(screenX+10, screenY+3,  12, 8);
+    ctx.fillStyle = pal[2];
+    ctx.fillRect(screenX+13, screenY+1,  6,  6);
+  } else if(t === T.BOOKSHELF) {
+    ctx.fillStyle = pal[1];
+    ctx.fillRect(screenX+1, screenY+1, TILE-2, TILE-2);
+    // 書脊
+    const bookColors = ['#f44','#44f','#4a4','#ff4','#a4f'];
+    for(let i=0;i<5;i++) {
+      ctx.fillStyle = bookColors[i];
+      ctx.fillRect(screenX+2+i*6, screenY+3, 4, TILE-7);
+    }
+  } else if(t === T.SERVER) {
+    ctx.fillStyle = pal[1];
+    ctx.fillRect(screenX+2, screenY+2, TILE-4, TILE-4);
+    // LED 燈
+    for(let i=0;i<3;i++) {
+      ctx.fillStyle = (Date.now()/500+i)%2>1?'#0f0':'#020';
+      ctx.fillRect(screenX+4+i*8, screenY+8, 4, 3);
+    }
+    ctx.fillStyle = '#333';
+    ctx.fillRect(screenX+4, screenY+14, TILE-8, 2);
+    ctx.fillRect(screenX+4, screenY+18, TILE-8, 2);
+  } else if(t === T.SOFA) {
+    ctx.fillStyle = pal[1];
+    ctx.fillRect(screenX+2, screenY+6, TILE-4, TILE-8);
+    ctx.fillStyle = pal[0];
+    ctx.fillRect(screenX+2, screenY+4, TILE-4, 5);
+    ctx.fillStyle = pal[2];
+    ctx.fillRect(screenX+2, screenY+4, 4, TILE-6);
+    ctx.fillRect(screenX+TILE-6, screenY+4, 4, TILE-6);
+  } else if(t === T.WHITEBOARD) {
+    ctx.fillStyle = '#e8e8f0';
+    ctx.fillRect(screenX+2, screenY+2, TILE-4, TILE-4);
+    ctx.fillStyle = '#c0c0d0';
+    ctx.strokeStyle = '#aaaacc';
+    ctx.lineWidth = 0.5;
+    for(let l=0;l<4;l++){
+      ctx.beginPath();
+      ctx.moveTo(screenX+4, screenY+6+l*6);
+      ctx.lineTo(screenX+TILE-4-Math.random()*8, screenY+6+l*6);
+      ctx.stroke();
+    }
+  } else if(t === T.DOOR) {
+    ctx.fillStyle = pal[0];
+    ctx.fillRect(screenX+4, screenY+2, TILE-8, TILE-4);
+    ctx.fillStyle = pal[1];
+    ctx.fillRect(screenX+TILE/2-1, screenY+TILE/2-2, 3, 3);
+  } else if(t === T.WINDOW) {
+    ctx.fillStyle = '#0a2030';
+    ctx.fillRect(screenX+4, screenY+4, TILE-8, TILE-8);
+    ctx.fillStyle = 'rgba(100,180,255,.2)';
+    ctx.fillRect(screenX+5, screenY+5, TILE-10, TILE-10);
+    ctx.fillStyle = 'rgba(255,255,255,.15)';
+    ctx.fillRect(screenX+6, screenY+6, 5, TILE-13);
+  }
+
+  // 格線
+  if(showGrid) {
+    ctx.strokeStyle = 'rgba(255,255,255,.04)';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(screenX, screenY, TILE, TILE);
+  }
+}
+
+function drawChar(char) {
+  const sx = char.px - camX;
+  const sy = char.py - camY;
+  const W = canvas.width, H = canvas.height;
+  if(sx < -TILE*2 || sx > W+TILE || sy < -TILE*2 || sy > H+TILE) return;
+
+  const skin = char.skin;
+  const frame = Math.floor(char.walkFrame) % 4;
+  const isSelected = char.id === selectedCharId;
+  const isHover    = char.id === hoverCharId;
+
+  // 選取光圈
+  if(isSelected || isHover) {
+    ctx.save();
+    ctx.globalAlpha = isSelected ? 0.7 : 0.4;
+    ctx.strokeStyle = isSelected ? '#4af' : '#fff';
+    ctx.lineWidth = 2;
+    const pulse = 1 + Math.sin(Date.now()/300)*0.1;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy+4, 12*pulse, 6*pulse, 0, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.save();
+  ctx.translate(sx, sy);
+
+  // 影子
+  ctx.fillStyle = 'rgba(0,0,0,.3)';
+  ctx.beginPath();
+  ctx.ellipse(0, 6, 8, 4, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // 身體
+  ctx.fillStyle = skin.body;
+  ctx.fillRect(-5, -6, 10, 12);
+
+  // 頭
+  ctx.fillStyle = skin.skin;
+  ctx.fillRect(-5, -16, 10, 10);
+
+  // 頭髮
+  ctx.fillStyle = skin.hair;
+  ctx.fillRect(-5, -17, 10, 4);
+  if(char.dir==='left')  ctx.fillRect(-6, -16, 2, 8);
+  if(char.dir==='right') ctx.fillRect(4,  -16, 2, 8);
+
+  // 眼睛（閃爍）
+  const blink = Math.floor(Date.now()/3000)%8===7;
+  ctx.fillStyle = '#000';
+  if(!blink) {
+    ctx.fillRect(-3,-12,2,2);
+    ctx.fillRect(1, -12,2,2);
+  } else {
+    ctx.fillRect(-3,-12,2,1); ctx.fillRect(1,-12,2,1);
+  }
+
+  // 手臂（走路動畫）
+  const armSwing = char.moving ? Math.sin(char.walkFrame*0.8)*4 : 0;
+  ctx.fillStyle = skin.body;
+  ctx.fillRect(-8, -5+armSwing,  3, 7);
+  ctx.fillRect(5,  -5-armSwing, 3, 7);
+
+  // 腿（走路動畫）
+  const legSwing = char.moving ? Math.sin(char.walkFrame*0.8)*3 : 0;
+  ctx.fillStyle = '#222244';
+  ctx.fillRect(-4, 5+legSwing,  3, 6);
+  ctx.fillRect(1,  5-legSwing,  3, 6);
+
+  // 表情
+  const emoEmoji = EMO_EMO[char.emotion] || '😶';
+  ctx.font = '10px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(emoEmoji, 0, -20);
+
+  // 說話泡泡
+  if(char.speech && char.speechTimer > 0) {
+    const bw = Math.min(char.speech.length * 6 + 16, 160);
+    ctx.fillStyle = 'rgba(255,255,255,.95)';
+    roundRect(ctx, -bw/2, -42, bw, 16, 4);
+    ctx.fill();
+    // 尾巴
+    ctx.beginPath();
+    ctx.moveTo(-4,-26); ctx.lineTo(0,-26); ctx.lineTo(-2,-30);
+    ctx.fillStyle = 'rgba(255,255,255,.95)';
+    ctx.fill();
+    // 文字
+    ctx.fillStyle = '#111';
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(char.speech.slice(0,20), 0, -31);
+  }
+
+  ctx.restore();
+
+  // 名稱標籤
+  if(showNames) {
+    ctx.save();
+    ctx.font = '9px "DotGothic16",monospace';
+    ctx.textAlign = 'center';
+    const nw = ctx.measureText(char.name).width + 8;
+    ctx.fillStyle = 'rgba(0,0,0,.7)';
+    roundRect(ctx, sx-nw/2, sy+10, nw, 13, 2);
+    ctx.fill();
+    ctx.fillStyle = isSelected ? '#4af' : '#c8d8e8';
+    ctx.fillText(char.name, sx, sy+20);
+    ctx.restore();
+  }
+}
+
+function drawRelations() {
+  if(!showRel) return;
+  charsData.forEach(cd => {
+    const from = chars.find(c=>c.id===cd.id);
+    if(!from) return;
+    const state = (worldData?.character_states||{})[cd.id]||{};
+    const rels = cd.relationships || state.relationships || {};
+    Object.entries(rels).forEach(([tid, desc]) => {
+      const to = chars.find(c=>c.id===tid);
+      if(!to) return;
+      const positive = /信任|合作|依賴|友好/.test(desc);
+      ctx.save();
+      ctx.globalAlpha = 0.3 + Math.sin(Date.now()/1000)*0.05;
+      ctx.strokeStyle = positive ? '#3fb950' : '#f85149';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4,4]);
+      ctx.beginPath();
+      ctx.moveTo(from.px-camX, from.py-camY);
+      ctx.lineTo(to.px-camX,   to.py-camY);
+      ctx.stroke();
+      ctx.restore();
+    });
+  });
+}
+
+function drawRoomLabels() {
+  ROOMS.forEach(room => {
+    const sx = room.x * TILE + room.w*TILE/2 - camX;
+    const sy = room.y * TILE + 8 - camY;
+    if(sx < -50 || sx > canvas.width+50 || sy < -20 || sy > canvas.height+20) return;
+    ctx.save();
+    ctx.globalAlpha = 0.45;
+    ctx.font = 'bold 11px "DotGothic16",monospace';
+    ctx.fillStyle = '#8ab8d8';
+    ctx.textAlign = 'center';
+    ctx.fillText(room.icon + ' ' + room.name, sx, sy+TILE/2);
+    ctx.restore();
+  });
+}
+
+function drawFrame() {
+  // 清空
+  ctx.fillStyle = '#060a0e';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  // 天氣粒子
+  updateParticles();
+
+  // 計算可見格範圍
+  const startX = Math.max(0, Math.floor(camX/TILE)-1);
+  const startY = Math.max(0, Math.floor(camY/TILE)-1);
+  const endX = Math.min(COLS, startX + Math.ceil(canvas.width/TILE)+2);
+  const endY = Math.min(ROWS, startY + Math.ceil(canvas.height/TILE)+2);
+
+  // 繪製地圖
+  for(let y=startY; y<endY; y++) {
+    for(let x=startX; x<endX; x++) {
+      drawTile(x, y, x*TILE-camX, y*TILE-camY);
+    }
+  }
+
+  // 關係線（角色下層）
+  drawRelations();
+
+  // 繪製角色（按 y 排序，近的在前）
+  const sorted = [...chars].sort((a,b) => a.py - b.py);
+  sorted.forEach(drawChar);
+
+  // 房間標籤
+  drawRoomLabels();
+
+  // 迷你地圖
+  drawMinimap();
+}
+
+function drawMinimap() {
+  const mw = 120, mh = 80;
+  miniCtx.fillStyle = '#060a0e';
+  miniCtx.fillRect(0,0,mw,mh);
+
+  const scaleX = mw / (COLS*TILE);
+  const scaleY = mh / (ROWS*TILE);
+
+  // 房間
+  ROOMS.forEach(room => {
+    miniCtx.fillStyle = '#1e3a5a';
+    miniCtx.fillRect(room.x*TILE*scaleX, room.y*TILE*scaleY, room.w*TILE*scaleX, room.h*TILE*scaleY);
+  });
+
+  // 角色點
+  chars.forEach(c => {
+    miniCtx.fillStyle = c.skin.body;
+    miniCtx.fillRect(c.px*scaleX-1.5, c.py*scaleY-1.5, 3, 3);
+  });
+
+  // 視野框
+  miniCtx.strokeStyle = '#4af';
+  miniCtx.lineWidth = 0.8;
+  miniCtx.strokeRect(
+    camX*scaleX, camY*scaleY,
+    canvas.width*scaleX, canvas.height*scaleY
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 角色更新
+// ══════════════════════════════════════════════════════════════
+function updateChars() {
+  chars.forEach(char => {
+    // ── 閒逛：隨機選房間內可走的格子 ──
+    char.idleTimer--;
+    if(char.idleTimer <= 0 && !char.moving && (!char.path || !char.path.length)) {
+      char.idleTimer = 150 + Math.random()*250;
+      const room = ROOMS.find(r=>r.id===char.roomId) || ROOMS[0];
+      for(let attempt=0; attempt<12; attempt++) {
+        const nx = room.x + 1 + Math.floor(Math.random()*(room.w-2));
+        const ny = room.y + 1 + Math.floor(Math.random()*(room.h-2));
+        if(isWalkable(nx,ny) && (nx!==char.tileX || ny!==char.tileY)) {
+          setCharTarget(char, nx, ny);
+          break;
+        }
+      }
+    }
+
+    // ── 沿 A* 路徑移動 ──
+    const tx = char.targetX * TILE + TILE/2;
+    const ty = char.targetY * TILE + TILE/2;
+    const dx = tx - char.px;
+    const dy = ty - char.py;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+
+    if(dist > 1.2) {
+      // 還沒到這一格
+      char.moving = true;
+      const speed = 1.4;
+      char.px += (dx/dist) * speed;
+      char.py += (dy/dist) * speed;
+      if(Math.abs(dx) > Math.abs(dy)) char.dir = dx>0?'right':'left';
+      else                              char.dir = dy>0?'down':'up';
+      char.walkFrame += 0.18;
+    } else {
+      // 到達這一格
+      char.px    = tx;
+      char.py    = ty;
+      char.tileX = char.targetX;
+      char.tileY = char.targetY;
+
+      // 繼續走路徑下一格
+      if(char.path && char.path.length > 0) {
+        const next = char.path.shift();
+        if(next && isWalkable(next.x, next.y)) {
+          char.targetX = next.x;
+          char.targetY = next.y;
+          char.moving  = true;
+        } else {
+          // 下一格被擋住（其他角色或狀態改變）→ 重新尋路
+          const goal = char.path.length ? char.path[char.path.length-1] : null;
+          char.path  = [];
+          char.moving = false;
+          if(goal) setCharTarget(char, goal.x, goal.y);
+        }
+      } else {
+        // 路徑走完
+        char.moving    = false;
+        char.path      = [];
+        char.walkFrame = 0;
+      }
+    }
+
+    // 說話泡泡倒數
+    if(char.speechTimer > 0) char.speechTimer--;
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// 主迴圈
+// ══════════════════════════════════════════════════════════════
+let lastTime = 0;
+function gameLoop(ts) {
+  requestAnimationFrame(gameLoop);
+  if(ts - lastTime < 16) return; // 限 60fps
+  lastTime = ts;
+  animFrame++;
+  updateChars();
+  drawFrame();
+}
+
+// ══════════════════════════════════════════════════════════════
+// 輔助
+// ══════════════════════════════════════════════════════════════
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y); ctx.arcTo(x+w,y, x+w,y+r, r);
+  ctx.lineTo(x+w, y+h-r); ctx.arcTo(x+w,y+h, x+w-r,y+h, r);
+  ctx.lineTo(x+r, y+h); ctx.arcTo(x,y+h, x,y+h-r, r);
+  ctx.lineTo(x, y+r); ctx.arcTo(x,y, x+r,y, r);
+  ctx.closePath();
+}
+
+function getTileAtScreen(sx, sy) {
+  const wx = sx + camX;
+  const wy = sy + camY;
+  return { x: Math.floor(wx/TILE), y: Math.floor(wy/TILE) };
+}
+
+function getCharAtScreen(sx, sy) {
+  const wx = sx + camX, wy = sy + camY;
+  for(const c of chars) {
+    if(Math.abs(c.px-wx)<14 && Math.abs(c.py-wy)<16) return c;
+  }
+  return null;
+}
+
+function sayHello(charId) {
+  const c = chars.find(c=>c.id===charId);
+  if(!c) return;
+  const phrases = ['你好！','忙著呢…','嗯？','有事嗎？','稍等一下','在工作中'];
+  c.speech = phrases[Math.floor(Math.random()*phrases.length)];
+  c.speechTimer = 120;
+}
+
+function showCharDialog(char) {
+  window._dialogCharId = char.id;
+  const cd = charsData.find(c=>c.id===char.id) || {};
+  const emo = EMO_EMO[char.emotion] || '😶';
+  const emoCol = EMO_COL[char.emotion] || 'var(--accent)';
+
+  // 頭像：用角色 emoji 或名字首字
+  const avEl = document.getElementById('dialog-avatar');
+  avEl.textContent = cd.avatar || char.name[0] || '👤';
+  avEl.style.borderColor = emoCol;
+  avEl.style.color = emoCol;
+
+  // 名稱列
+  document.getElementById('dialog-name').innerHTML =
+    '<span style="color:'+emoCol+'">'+emo+'</span> '+
+    '<strong>'+char.name+'</strong>'+
+    (char.role ? ' <span style="color:var(--dim);font-weight:400">'+char.role+'</span>' : '')+
+    (char.location ? ' <span style="font-size:.68rem;color:var(--dim)"> 📍'+char.location+'</span>' : '');
+
+  // 內容列
+  const lines = [];
+  if(char.emotion) lines.push('<span style="color:'+emoCol+'">心情：'+char.emotion+'</span>');
+  if(char.task)    lines.push('🎯 任務：'+char.task);
+  if(char.notes)   lines.push('💭 想法：<span style="color:var(--dim)">'+char.notes+'</span>');
+  document.getElementById('dialog-text').innerHTML = lines.join('　');
+
+  document.getElementById('dialog-box').style.display = 'block';
+  sayHello(char.id);
+}
+
+function closeDialog() {
+  document.getElementById('dialog-box').style.display = 'none';
+}
+
+// ══════════════════════════════════════════════════════════════
+// 輸入
+// ══════════════════════════════════════════════════════════════
+function initInput() {
+  canvas.addEventListener('mousedown', e => {
+    dragging = true;
+    dragStart = {x:e.clientX, y:e.clientY};
+    camStart  = {x:camX, y:camY};
+  });
+  canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    if(dragging) {
+      camX = camStart.x - (e.clientX - dragStart.x);
+      camY = camStart.y - (e.clientY - dragStart.y);
+      clampCam();
+    } else {
+      // 場景 tooltip
+      const tx = Math.floor((sx+camX)/TILE);
+      const ty = Math.floor((sy+camY)/TILE);
+      const hovRoom = ROOMS.find(r=>tx>=r.x&&tx<r.x+r.w&&ty>=r.y&&ty<r.y+r.h);
+      if(hovRoom) {
+        loadSceneTooltip(hovRoom.id, sx, sy);
+      } else {
+        hideSceneTooltip();
+      }
+      const c = getCharAtScreen(sx, sy);
+      if(c !== hoverCharId) {
+        hoverCharId = c ? c.id : null;
+        canvas.style.cursor = c ? 'pointer' : 'default';
+        if(c) {
+          document.getElementById('status-msg').textContent =
+            `${c.name}（${c.role}）— ${c.emotion} — ${c.task||'無任務'}`;
+        }
+      }
+    }
+  });
+  canvas.addEventListener('mouseup', e => {
+    if(!dragging) return;
+    const moved = Math.abs(e.clientX-dragStart.x)+Math.abs(e.clientY-dragStart.y);
+    if(moved < 5) {
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const c = getCharAtScreen(sx, sy);
+      if(c) {
+        selectedCharId = c.id;
+        showCharDialog(c);
+        updateSidebar();
+      } else {
+        closeDialog();
+        selectedCharId = null;
+      }
+    }
+    dragging = false;
+  });
+  canvas.addEventListener('wheel', e => {
+    // 暫不實作縮放，只捲動
+    camX += e.deltaX * 0.8;
+    camY += e.deltaY * 0.8;
+    clampCam();
+    e.preventDefault();
+  }, {passive:false});
+
+  // 觸控支援
+  let lastTouch = null;
+  canvas.addEventListener('touchstart', e=>{
+    lastTouch = e.touches[0];
+    dragStart = {x:lastTouch.clientX, y:lastTouch.clientY};
+    camStart  = {x:camX, y:camY};
+  });
+  canvas.addEventListener('touchmove', e=>{
+    e.preventDefault();
+    const t = e.touches[0];
+    camX = camStart.x - (t.clientX - dragStart.x);
+    camY = camStart.y - (t.clientY - dragStart.y);
+    clampCam();
+  },{passive:false});
+
+  document.addEventListener('keydown', e=>{
+    const spd=32;
+    if(e.key==='ArrowLeft'||e.key==='a') {camX-=spd;clampCam();}
+    if(e.key==='ArrowRight'||e.key==='d'){camX+=spd;clampCam();}
+    if(e.key==='ArrowUp'||e.key==='w')   {camY-=spd;clampCam();}
+    if(e.key==='ArrowDown'||e.key==='s') {camY+=spd;clampCam();}
+    if(e.key==='r'||e.key==='R') loadWorld();
+    if(e.key==='Escape') {closeDialog();selectedCharId=null;}
+    if(e.key==='g') toggleGrid();
+    if(e.key==='n') toggleNames();
+  });
+}
+
+function clampCam() {
+  const maxX = COLS*TILE - canvas.width;
+  const maxY = ROWS*TILE - canvas.height;
+  camX = Math.max(0, Math.min(camX, Math.max(0,maxX)));
+  camY = Math.max(0, Math.min(camY, Math.max(0,maxY)));
+}
+
+// ══════════════════════════════════════════════════════════════
+// 資料載入
+// ══════════════════════════════════════════════════════════════
+async function loadWorld() {
+  document.getElementById('status-msg').textContent = '載入世界中…';
+  try {
+    const [wRes, cRes] = await Promise.all([
+      fetch('/ai/world'), fetch('/ai/characters'),
+    ]);
+    worldData  = await wRes.json();
+    charsData  = await cRes.json();
+  } catch(e) {
+    useDemoData();
+  }
+  applyWorldData();
+  updateSidebar();
+  document.getElementById('status-msg').textContent =
+    `已載入 ${charsData.length} 位角色`;
+}
+
+function applyWorldData() {
+  const meta = worldData?.meta || worldData?.world_meta || {};
+  document.getElementById('hud-title').textContent =
+    '▶ ' + (meta.world_name || meta.name || '世界地圖');
+  // 時間
+  updateHudTime(meta);
+  document.getElementById('hud-mood').textContent =
+    (meta.atmosphere || meta.overall_mood || '');
+  // 天氣粒子
+  if(meta.weather) applyWeather(meta.weather);
+
+  // 更新角色位置和狀態
+  if(!chars.length) {
+    initChars();
+  } else {
+    charsData.forEach(cd => {
+      const c = chars.find(c=>c.id===cd.id);
+      if(!c) return;
+      const state = (worldData?.character_states||{})[cd.id]||{};
+      c.emotion = state.emotion || '平靜';
+      c.task    = state.current_task || '';
+      c.notes   = state.private_notes || '';
+      const newLoc  = state.location || '辦公室';
+      const newRoom = LOC_MAP[newLoc] || 'office';
+      if(newRoom !== c.roomId) {
+        c.roomId = newRoom;
+        c.location = newLoc;
+        const room = ROOMS.find(r=>r.id===newRoom) || ROOMS[0];
+        const pos  = findWalkable(room, 0);
+        // 先傳送到門口，再用 A* 走進去
+        c.tileX   = pos.x;
+        c.tileY   = pos.y;
+        c.px      = pos.x * TILE + TILE/2;
+        c.py      = pos.y * TILE + TILE/2;
+        setCharTarget(c, pos.x, pos.y);
+        c.speech = '去' + newLoc + '了';
+        c.speechTimer = 90;
+      }
+    });
+  }
+}
+
+function useDemoData() {
+  worldData = {
+    meta:{ world_name:'燦流科技', current_date:'2026-03-10', phase:'Q1 衝刺期', atmosphere:'緊張' },
+    character_states:{
+      'char_001':{emotion:'焦慮', location:'辦公室', current_task:'修復支付系統 bug', private_notes:'擔心 deadline'},
+      'char_002':{emotion:'亢奮', location:'會議室', current_task:'準備新功能提案',   private_notes:'想推三個功能'},
+      'char_003':{emotion:'謹慎', location:'大廳',   current_task:'審查 Q1 預算',     private_notes:'發現費用異常'},
+    },
+    event_history:[
+      {date:'2026-03-09',type:'危機',   title:'支付系統當機',description:'緊急修復中',    status:'處理中'},
+      {date:'2026-03-08',type:'會議',   title:'Q1 預算檢討', description:'發現費用異常',  status:'待解決'},
+      {date:'2026-03-07',type:'里程碑', title:'新功能上線',  description:'RAG 功能正式啟用',status:'完成'},
+    ]
+  };
+  charsData = [
+    {id:'char_001',name:'李美玲',role:'後端工程師',avatar:'李',
+     relationships:{'char_002':'合作但有摩擦','char_003':'尊重但少接觸'}},
+    {id:'char_002',name:'羅威成',role:'產品經理',  avatar:'羅',
+     relationships:{'char_001':'依賴技術判斷','char_003':'常被潑冷水'}},
+    {id:'char_003',name:'鄭國豪',role:'財務長',    avatar:'鄭',
+     relationships:{'char_001':'信任她的判斷','char_002':'覺得不夠務實'}},
+  ];
+}
+
+// ══════════════════════════════════════════════════════════════
+// Sidebar
+// ══════════════════════════════════════════════════════════════
+function setTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.stab').forEach((el,i)=>{
+    el.classList.toggle('active', ['chars','events','world'][i]===tab);
+  });
+  updateSidebar();
+}
+function updateSidebar() {
+  const el = document.getElementById('sidebar-body');
+  if(currentTab==='chars') renderCharsSidebar(el);
+  else if(currentTab==='events') renderEventsSidebar(el);
+  else renderWorldSidebar(el);
+}
+
+function renderCharsSidebar(el) {
+  const states = worldData?.character_states||{};
+  el.innerHTML = charsData.map((cd,idx)=>{
+    const c = chars.find(c=>c.id===cd.id);
+    const state = states[cd.id]||{};
+    const emo = c?.emotion || state.emotion || '平靜';
+    const emoCol = EMO_COL[emo]||'#8b949e';
+    const emoEmo = EMO_EMO[emo]||'😶';
+    const isSel = selectedCharId===cd.id;
+    const skinCol = CHAR_SKINS[idx%CHAR_SKINS.length].body;
+    return `<div class="char-card${isSel?' selected':''}" id="cc-${cd.id}" onclick="clickCharCard('${cd.id}')">
+      <div class="char-card-top">
+        <div class="char-sprite-preview" style="background:${CHAR_SKINS[idx%CHAR_SKINS.length].body}22;
+          border-color:${skinCol};display:flex;align-items:center;justify-content:center;
+          font-size:1.1rem">${emoEmo}</div>
+        <div>
+          <div class="char-name-big">${cd.name}</div>
+          <div class="char-role-sm">${cd.role||''}</div>
+        </div>
+        <span class="emo-pill" style="background:${emoCol}22;color:${emoCol};margin-left:auto">${emo}</span>
+      </div>
+      <div class="char-row"><span class="char-label">📍 位置</span><span class="char-val">${state.location||'—'}</span></div>
+      <div class="char-row"><span class="char-label">🎯 任務</span><span class="char-val" style="font-size:.66rem">${state.current_task||'—'}</span></div>
+      ${state.private_notes?`<div class="char-row"><span class="char-label">💭 想法</span><span class="char-val" style="color:var(--dim);font-size:.66rem">${state.private_notes}</span></div>`:''}
+      <div style="margin-top:7px;display:flex;gap:5px">
+        <button onclick="event.stopPropagation();focusChar('${cd.id}')"
+          style="flex:1;background:none;border:1px solid var(--border);color:var(--dim);
+          padding:4px;border-radius:3px;cursor:pointer;font-size:.68rem;font-family:inherit">🎯 定位</button>
+        <button onclick="event.stopPropagation();chatWithChar('${cd.id}')"
+          style="flex:1;background:none;border:1px solid #1a3a5a;color:#4af;
+          padding:4px;border-radius:3px;cursor:pointer;font-size:.68rem;font-family:inherit">💬 對話</button>
+        <button onclick="event.stopPropagation();triggerAction('${cd.id}','${cd.name}')"
+          style="flex:1;background:none;border:1px solid #1a4a22;color:#3fb950;
+          padding:4px;border-radius:3px;cursor:pointer;font-size:.68rem;font-family:inherit">▶ 行動</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderEventsSidebar(el) {
+  const evts = worldData?.event_history||[];
+  if(!evts.length){el.innerHTML='<div style="color:var(--dim);font-size:.78rem;padding:8px">尚無事件</div>';return;}
+  const cls = {危機:'crisis',會議:'meeting',里程碑:'milestone'};
+  el.innerHTML = [...evts].reverse().map(e=>`
+    <div class="evt-item ${cls[e.type]||''}">
+      <div class="evt-date">${e.date||''} · ${e.type||''}</div>
+      <div class="evt-title">${e.title}</div>
+      <div class="evt-desc">${e.description||''}</div>
+      ${e.status?`<div style="font-size:.64rem;color:var(--accent);margin-top:3px">→ ${e.status}</div>`:''}
+    </div>`).join('');
+}
+
+function renderWorldSidebar(el) {
+  const meta = worldData?.meta||worldData?.world_meta||{};
+  const states = worldData?.character_states||{};
+  el.innerHTML = `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:12px;margin-bottom:8px">
+      <div style="font-size:.7rem;color:var(--dim);margin-bottom:8px">🌐 世界</div>
+      ${[['名稱',meta.world_name||meta.name],['日期',meta.current_date||meta.date],
+         ['階段',meta.phase],['氛圍',meta.atmosphere||meta.overall_mood],
+         ['角色',charsData.length+'位']]
+        .filter(r=>r[1]).map(r=>`<div class="char-row"><span class="char-label">${r[0]}</span><span class="char-val">${r[1]}</span></div>`).join('')}
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:12px;margin-bottom:8px">
+      <div style="font-size:.7rem;color:var(--dim);margin-bottom:6px">📍 各位置</div>
+      ${ROOMS.filter(r=>r.id!=='outdoor').map(room=>{
+        const inRoom=charsData.filter(cd=>{
+          const s=states[cd.id]||{};
+          return (LOC_MAP[s.location||'辦公室']||'office')===room.id;
+        });
+        if(!inRoom.length)return '';
+        return `<div class="char-row"><span class="char-label">${room.icon}</span><span class="char-val">${inRoom.map(c=>c.name).join('、')}</span></div>`;
+      }).join('')}
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:12px">
+      <div style="font-size:.7rem;color:var(--dim);margin-bottom:6px">🎮 操作說明</div>
+      ${[['拖曳','移動地圖'],['點角色','查看詳情'],['滾輪','捲動'],
+         ['WASD/方向鍵','移動視野'],['R','更新'],['G','格線'],['N','名稱']]
+        .map(r=>`<div class="char-row"><span class="char-label" style="min-width:60px">${r[0]}</span><span class="char-val">${r[1]}</span></div>`).join('')}
+    </div>`;
+}
+
+// ── 角色卡點擊 ──
+function clickCharCard(id) {
+  selectedCharId = id;
+  const c = chars.find(c=>c.id===id);
+  if(c) { showCharDialog(c); focusChar(id); }
+  updateSidebar();
+}
+
+function focusChar(id) {
+  const c = chars.find(c=>c.id===id);
+  if(!c) return;
+  camX = c.px - canvas.width/2;
+  camY = c.py - canvas.height/2;
+  clampCam();
+}
+
+// 點地圖空白處：讓選取的角色走過去
+function moveSelectedCharTo(sx, sy) {
+  if(!selectedCharId) return;
+  const c = chars.find(c=>c.id===selectedCharId);
+  if(!c) return;
+  const tx = Math.floor((sx+camX)/TILE);
+  const ty = Math.floor((sy+camY)/TILE);
+  if(isWalkable(tx,ty)) {
+    setCharTarget(c, tx, ty);
+    c.speech = '好的…';
+    c.speechTimer = 60;
+  }
+}
+
+async function triggerAction(charId, name) {
+  document.getElementById('status-msg').textContent = `▶ ${name} 行動中…`;
+  const c = chars.find(c=>c.id===charId);
+  if(c) { c.speech='正在行動…'; c.speechTimer=120; }
+  try {
+    await fetch(`/ai/agent/run/${charId}`,{method:'POST'});
+    document.getElementById('status-msg').textContent = `✅ ${name} 完成行動`;
+    setTimeout(loadWorld, 2000);
+  } catch(e) {
+    document.getElementById('status-msg').textContent = `❌ 無法觸發行動`;
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// 天氣粒子系統
+// ══════════════════════════════════════════════════════════════
+let pCanvas, pCtx, particles = [], weatherCode = "clear";
+
+const PARTICLE_CONFIGS = {
+  rain_light: { count:60,  speed:[2,4],   size:[1,2],   color:"rgba(150,190,255,.5)", angle:15 },
+  rain:       { count:120, speed:[4,7],   size:[1,2],   color:"rgba(130,170,255,.6)", angle:20 },
+  rain_heavy: { count:220, speed:[7,12],  size:[1,3],   color:"rgba(100,150,255,.7)", angle:25 },
+  snow:       { count:80,  speed:[0.5,1.5],size:[2,4],  color:"rgba(220,240,255,.8)", angle:5  },
+  mist:       { count:30,  speed:[0.3,0.8],size:[8,16], color:"rgba(180,200,220,.15)",angle:0  },
+};
+
+function initParticles(code) {
+  weatherCode = code;
+  particles = [];
+  const cfg = PARTICLE_CONFIGS[code];
+  if(!cfg || !pCanvas) return;
+  for(let i=0; i<cfg.count; i++) {
+    particles.push(spawnParticle(cfg, true));
+  }
+}
+
+function spawnParticle(cfg, random=false) {
+  const rad = cfg.angle * Math.PI / 180;
+  const speed = cfg.speed[0] + Math.random()*(cfg.speed[1]-cfg.speed[0]);
+  return {
+    x: Math.random() * pCanvas.width,
+    y: random ? Math.random() * pCanvas.height : -10,
+    vx: Math.sin(rad) * speed,
+    vy: Math.cos(rad) * speed,
+    size: cfg.size[0] + Math.random()*(cfg.size[1]-cfg.size[0]),
+    alpha: 0.4 + Math.random()*0.4,
+    color: cfg.color,
+  };
+}
+
+function updateParticles() {
+  if(!pCanvas || !particles.length) return;
+  pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
+  const cfg = PARTICLE_CONFIGS[weatherCode];
+  if(!cfg) return;
+
+  particles.forEach((p, i) => {
+    p.x += p.vx; p.y += p.vy;
+
+    // 雪：左右漂動
+    if(weatherCode === "snow") p.x += Math.sin(Date.now()/1000 + i) * 0.3;
+
+    // 超出邊界 → 重生
+    if(p.y > pCanvas.height + 10 || p.x < -20 || p.x > pCanvas.width+20) {
+      Object.assign(p, spawnParticle(cfg));
+    }
+
+    // 繪製
+    if(weatherCode === "snow" || weatherCode === "mist") {
+      pCtx.beginPath();
+      pCtx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+      pCtx.fillStyle = p.color;
+      pCtx.fill();
+    } else {
+      // 雨滴
+      pCtx.beginPath();
+      pCtx.moveTo(p.x, p.y);
+      pCtx.lineTo(p.x - p.vx*2, p.y - p.vy*2);
+      pCtx.strokeStyle = p.color;
+      pCtx.lineWidth = p.size;
+      pCtx.stroke();
+    }
+  });
+
+  // 戶外場景淡色覆蓋（下雨時加深）
+  if(weatherCode.includes("rain")) {
+    pCtx.fillStyle = "rgba(0,0,40,.08)";
+    pCtx.fillRect(0,0,pCanvas.width,pCanvas.height);
+  }
+}
+
+function resizeParticleCanvas() {
+  if(!pCanvas) return;
+  pCanvas.width  = pCanvas.parentElement.clientWidth;
+  pCanvas.height = pCanvas.parentElement.clientHeight;
+}
+
+// ══════════════════════════════════════════════════════════════
+// 時間推進
+// ══════════════════════════════════════════════════════════════
+function showTickMenu() {
+  const m = document.getElementById("tick-menu");
+  m.style.display = m.style.display === "flex" ? "none" : "flex";
+}
+
+async function doTick(mode, n) {
+  document.getElementById("tick-menu").style.display = "none";
+  const aiUpdate = document.getElementById("tick-ai-update")?.checked || false;
+  document.getElementById("status-msg").textContent = `⏩ 推進 ${n} ${mode==="hour"?"小時":"天"}…`;
+  const btn = document.getElementById("tick-btn");
+  if(btn) { btn.disabled=true; btn.textContent="⏳…"; }
+  try {
+    const res = await fetch("/ai/world/tick", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({mode, n, ai_update: aiUpdate}),
+    }).then(r=>r.json());
+
+    if(res.ok) {
+      // 更新 HUD
+      updateHudTime(res);
+      // 如果天氣也更新了
+      if(res.weather) applyWeather(res.weather);
+      // 重載世界
+      await loadWorld();
+      document.getElementById("status-msg").textContent =
+        `✅ 已推進至 ${res.date} ${res.time}`;
+      // 顯示角色說話
+      chars.forEach(c => {
+        c.speech = "時間過了…";
+        c.speechTimer = 80;
+      });
+    }
+  } catch(e) {
+    document.getElementById("status-msg").textContent = "❌ 推進失敗：" + e.message;
+  } finally {
+    if(btn) { btn.disabled=false; btn.textContent="⏩ 推進"; }
+  }
+}
+
+async function refreshWeather() {
+  document.getElementById("hud-weather").textContent = "🔄 更新中…";
+  try {
+    const weather = await fetch("/ai/world/weather", {method:"POST"}).then(r=>r.json());
+    applyWeather(weather);
+    document.getElementById("status-msg").textContent = `🌡 天氣已更新：${weather.condition} ${weather.temperature_c}°C`;
+  } catch(e) {
+    document.getElementById("hud-weather").textContent = "❌";
+  }
+}
+
+function applyWeather(weather) {
+  if(!weather) return;
+  const emoji = weather.emoji || "🌡";
+  const temp  = weather.temperature_c ?? "?";
+  const cond  = weather.condition || "";
+  document.getElementById("hud-weather").textContent = `${emoji} ${temp}°C ${cond}`;
+
+  // 天氣粒子
+  const particle = weather.particle || "none";
+  if(particle !== "none") {
+    initParticles(particle);
+  } else {
+    particles = [];
+    if(pCtx) pCtx.clearRect(0,0,pCanvas.width,pCanvas.height);
+  }
+
+  // 背景色調
+  const body = document.getElementById("canvas-wrap");
+  const tints = {
+    rain:"rgba(0,10,30,.15)", rain_light:"rgba(0,10,20,.08)",
+    rain_heavy:"rgba(0,0,30,.25)", snow:"rgba(200,220,255,.05)",
+    mist:"rgba(150,170,190,.1)", clear:"rgba(255,200,50,.03)",
+  };
+  body.style.background = tints[particle] || "";
+}
+
+function updateHudTime(meta) {
+  const dateStr = meta.date || meta.current_date || "";
+  const timeStr = meta.time || "";
+  const dow     = meta.day_of_week || "";
+  document.getElementById("hud-time").textContent = `📅 ${dateStr} ${timeStr} ${dow}`;
+}
+
+// 場景面板 tooltip
+async function loadSceneTooltip(roomId, x, y) {
+  try {
+    const scene = await fetch(`/ai/world/scenes/${roomId}`).then(r=>r.json());
+    if(!scene || !Object.keys(scene).length) return;
+    let tip = document.getElementById("scene-tip");
+    if(!tip) {
+      tip = document.createElement("div");
+      tip.id = "scene-tip";
+      tip.style.cssText = `position:absolute;background:rgba(10,14,20,.97);border:1px solid var(--border);
+        border-radius:6px;padding:8px 12px;font-size:.72rem;color:var(--text);z-index:40;
+        pointer-events:none;max-width:200px;line-height:1.6`;
+      document.getElementById("canvas-wrap").appendChild(tip);
+    }
+    const lines = [
+      `<b>${scene.icon||""} ${scene.name||roomId}</b>`,
+      scene.lighting   ? `💡 ${scene.lighting}` : "",
+      scene.temperature_c !== undefined ? `🌡 ${scene.temperature_c}°C` : "",
+      scene.noise_level ? `🔊 ${scene.noise_level}` : "",
+      scene.smell       ? `👃 ${scene.smell}` : "",
+      scene.notes       ? `<span style="color:var(--dim)">${scene.notes}</span>` : "",
+    ].filter(Boolean).join("<br>");
+    tip.innerHTML = lines;
+    tip.style.left = (x+10)+"px";
+    tip.style.top  = (y+10)+"px";
+    tip.style.display = "block";
+  } catch(e) {}
+}
+
+function hideSceneTooltip() {
+  const tip = document.getElementById("scene-tip");
+  if(tip) tip.style.display = "none";
+}
+
+// ── 聊天室連結 ──
+function openChat() {
+  window.location.href = '/ai?from=rpg';
+}
+
+function chatWithChar(charId) {
+  if(!charId) return;
+  try {
+    localStorage.setItem('rpg_select_char', JSON.stringify({charId, ts: Date.now()}));
+  } catch(e){}
+  // 同分頁跳轉，可用返回鍵回地圖
+  window.location.href = '/ai?char=' + charId + '&from=rpg';
+}
+
+// ── 接收聊天室訊息（跨頁面通訊）──
+window.addEventListener('message', e => {
+  if(e.data?.type !== 'chat_update') return;
+  const {charId, emotion, task, speech} = e.data;
+  const c = chars.find(c=>c.id===charId);
+  if(!c) return;
+  if(emotion) c.emotion = emotion;
+  if(task)    c.task = task;
+  if(speech) { c.speech = speech.slice(0,20); c.speechTimer = 180; }
+  // 讓角色走到新位置
+  if(e.data.location) {
+    const newRoom = LOC_MAP[e.data.location] || c.roomId;
+    if(newRoom !== c.roomId) {
+      c.roomId = newRoom;
+      const room = ROOMS.find(r=>r.id===newRoom) || ROOMS[0];
+      const pos  = findWalkable(room, 0);
+      c.targetX = pos.x;
+      c.targetY = pos.y;
+    }
+  }
+  updateSidebar();
+});
+
+// ── 接收聊天室 localStorage 廣播 ──
+window.addEventListener('storage', e => {
+  if(e.key === 'rpg_update' && e.newValue) {
+    try {
+      const data = JSON.parse(e.newValue);
+      const c = chars.find(c=>c.id===data.charId);
+      if(!c) return;
+      if(data.emotion) c.emotion = data.emotion;
+      if(data.speech)  { c.speech = data.speech; c.speechTimer = 220; }
+      if(data.location) {
+        const newRoom = LOC_MAP[data.location] || c.roomId;
+        if(newRoom !== c.roomId) {
+          c.roomId = newRoom;
+          const room = ROOMS.find(r=>r.id===newRoom)||ROOMS[0];
+          const pos  = findWalkable(room, 0);
+          c.targetX  = pos.x;
+          c.targetY  = pos.y;
+        }
+      }
+      updateSidebar();
+      // 閃一下對應角色卡
+      const card = document.getElementById('cc-' + data.charId);
+      if(card){ card.style.borderColor='#4af'; setTimeout(()=>card.style.borderColor='',800); }
+    } catch(_){}
+  }
+});
+
+// ── 即時聊天 Feed（輪詢）──
+let _lastFeedTs = 0;
+async function pollChatFeed() {
+  try {
+    const res = await fetch('/ai/world/feed?since=' + _lastFeedTs).then(r=>r.json());
+    if(res.messages && res.messages.length) {
+      res.messages.forEach(msg => {
+        const c = chars.find(c=>c.id===msg.char_id);
+        if(c && msg.preview) {
+          c.speech = msg.preview;
+          c.speechTimer = 200;
+        }
+      });
+      _lastFeedTs = res.ts || Date.now();
+    }
+  } catch(e) {}
+}
+setInterval(pollChatFeed, 5000);
+
+// ── 切換 ──
+function toggleGrid()  { showGrid=!showGrid; }
+function toggleNames() { showNames=!showNames; }
+function toggleRel()   {
+  showRel=!showRel;
+  document.getElementById('rel-btn').classList.toggle('active',showRel);
+}
+
+// ══════════════════════════════════════════════════════════════
+// 初始化
+// ══════════════════════════════════════════════════════════════
+function resize() {
+  const wrap = document.getElementById('canvas-wrap');
+  canvas.width  = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
+  resizeParticleCanvas();
+  clampCam();
+}
+
+function init() {
+  canvas     = document.getElementById('game-canvas');
+  ctx        = canvas.getContext('2d');
+  miniCanvas = document.getElementById('minimap');
+  miniCtx    = miniCanvas.getContext('2d');
+  pCanvas    = document.getElementById('particle-canvas');
+  pCtx       = pCanvas ? pCanvas.getContext('2d') : null;
+
+  resize();
+  resizeParticleCanvas();
+  window.addEventListener('resize', resize);
+
+  buildTileMap();
+  initInput();
+  loadWorld().then(()=>{
+    // 置中鏡頭到辦公區
+    camX = TILE*2 - 60;
+    camY = TILE*2 - 60;
+    clampCam();
+    requestAnimationFrame(gameLoop);
+  });
+
+  // 自動更新
+  setInterval(loadWorld, 30000);
+}
+
+init();
+</script>
+</body>
+</html>
